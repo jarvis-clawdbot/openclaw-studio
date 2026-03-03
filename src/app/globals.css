@@ -1468,3 +1468,59 @@ textarea:focus::-webkit-scrollbar {
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
+
+/* ── Subtle grid background ───────────────────────────────── */
+.bg-grid {
+  background-image:
+    linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* ── Neon glow borders ────────────────────────────────────── */
+.neon-border-blue  { box-shadow: 0 0 0 1px rgba(14,165,233,0.4), 0 0 20px rgba(14,165,233,0.15); }
+.neon-border-purple{ box-shadow: 0 0 0 1px rgba(139,92,246,0.4), 0 0 20px rgba(139,92,246,0.15); }
+.neon-border-green { box-shadow: 0 0 0 1px rgba(16,185,129,0.4), 0 0 20px rgba(16,185,129,0.15); }
+.neon-border-amber { box-shadow: 0 0 0 1px rgba(245,158,11,0.4), 0 0 20px rgba(245,158,11,0.15); }
+
+/* ── Trend badges ─────────────────────────────────────────── */
+.trend-up   { color: #34d399; }
+.trend-down { color: #f87171; }
+.trend-flat { color: #94a3b8; }
+
+/* ── Animated gradient border (wraps a card) ─────────────── */
+@keyframes border-spin {
+  from { --border-angle: 0turn; }
+  to   { --border-angle: 1turn; }
+}
+@property --border-angle {
+  syntax: "<angle>"; inherits: true; initial-value: 0turn;
+}
+.animated-border {
+  border: 1.5px solid transparent;
+  background:
+    linear-gradient(rgb(15,23,42), rgb(15,23,42)) padding-box,
+    conic-gradient(from var(--border-angle), #0ea5e9 0%, #8b5cf6 50%, #0ea5e9 100%) border-box;
+  animation: border-spin 4s linear infinite;
+}
+
+/* ── Pulse ring for active agent avatar ──────────────────── */
+@keyframes ring-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(52,211,153,0.5); }
+  70%  { box-shadow: 0 0 0 8px rgba(52,211,153,0); }
+  100% { box-shadow: 0 0 0 0 rgba(52,211,153,0); }
+}
+.ring-pulse { animation: ring-pulse 2s ease-out infinite; }
+
+/* ── Stat card accent line ────────────────────────────────── */
+.stat-accent-top::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+  border-radius: 12px 12px 0 0;
+}
+.stat-accent-blue::before   { background: linear-gradient(90deg, #0ea5e9, #38bdf8); }
+.stat-accent-green::before  { background: linear-gradient(90deg, #10b981, #34d399); }
+.stat-accent-purple::before { background: linear-gradient(90deg, #8b5cf6, #a78bfa); }
+.stat-accent-amber::before  { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
