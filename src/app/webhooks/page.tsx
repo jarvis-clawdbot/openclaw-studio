@@ -81,7 +81,7 @@ export default function WebhooksPage() {
   };
 
   return (
-    <div className="h-screen bg-slate-900 p-6 overflow-auto">
+    <div className="h-screen bg-slate-950 p-6 overflow-auto">
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Webhooks</h1>
@@ -165,7 +165,7 @@ export default function WebhooksPage() {
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                   placeholder="e.g. Slack Notifications"
-                  className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
+                  className="w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
                 />
               </div>
               <div>
@@ -175,7 +175,7 @@ export default function WebhooksPage() {
                   value={form.url}
                   onChange={(e) => setForm({ ...form, url: e.target.value })}
                   placeholder="https://hooks.slack.com/..."
-                  className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white text-sm font-mono focus:outline-none focus:border-blue-500"
+                  className="w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2 text-white text-sm font-mono focus:outline-none focus:border-blue-500"
                 />
               </div>
               <div>

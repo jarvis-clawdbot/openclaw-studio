@@ -140,7 +140,7 @@ export default function BoardsPage() {
   };
 
   return (
-    <div className="h-screen bg-slate-900 flex flex-col">
+    <div className="h-screen bg-slate-950 flex flex-col">
       {/* Header */}
       <div className="p-4 border-b border-white/10 shrink-0">
         <div className="flex items-center justify-between">

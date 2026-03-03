@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef } from "react";
 import { useReplayStore, ReplayEvent, ReplaySession } from "@/stores/replayStore";
 
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
+
 const eventColors: Record<string, string> = {
   user_message: "bg-blue-900 border-blue-500",
   assistant_message: "bg-green-900 border-green-500",
@@ -31,7 +33,7 @@ export default function ReplayPage() {
   useEffect(() => {
     const loadSessions = async () => {
       try {
-        const res = await fetch("http://localhost:8000/api/replay/sessions");
+        const res = await fetch(`${BACKEND_URL}/api/replay/sessions`);
         if (!res.ok) {
           setSessions([]);
           return;
@@ -75,7 +77,7 @@ export default function ReplayPage() {
     selectSession(session);
     setCurrentTime(session.startedAt);
     try {
-      const res = await fetch(`http://localhost:8000/api/replay/sessions/${session.id}/events`);
+      const res = await fetch(`${BACKEND_URL}/api/replay/sessions/${session.id}/events`);
       if (res.ok) {
         const events: ReplayEvent[] = await res.json();
         const enriched = { ...session, events };
@@ -98,7 +100,7 @@ export default function ReplayPage() {
   };
 
   return (
-    <div className="h-screen bg-slate-900 flex">
+    <div className="h-screen bg-slate-950 flex">
       <div className="w-72 bg-slate-800 border-r border-slate-700 overflow-y-auto">
         <div className="p-4 border-b border-slate-700">
           <h2 className="text-lg font-semibold text-white">Sessions</h2>
@@ -148,7 +150,7 @@ export default function ReplayPage() {
                     </div>
                     <div className="text-white text-sm">{event.content}</div>
                     {event.metadata && (
-                      <pre className="mt-2 text-xs text-slate-400 bg-slate-900/50 p-2 rounded overflow-x-auto">{JSON.stringify(event.metadata, null, 2)}</pre>
+                      <pre className="mt-2 text-xs text-slate-400 bg-slate-950/50 p-2 rounded overflow-x-auto">{JSON.stringify(event.metadata, null, 2)}</pre>
                     )}
                   </div>
                 ))}

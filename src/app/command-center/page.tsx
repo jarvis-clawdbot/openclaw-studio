@@ -140,7 +140,7 @@ export default function CommandCenterPage() {
   };
 
   return (
-    <div className="h-screen bg-slate-900 flex">
+    <div className="h-screen bg-slate-950 flex">
       {/* Agent sidebar */}
       <div className="w-72 bg-slate-800 border-r border-slate-700 overflow-y-auto flex flex-col">
         <div className="p-4 border-b border-slate-700">

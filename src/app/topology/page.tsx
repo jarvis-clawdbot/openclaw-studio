@@ -88,9 +88,9 @@ function TopologyInner() {
   }, [setSelectedAgent, agentsList]);
 
   return (
-    <div className="relative bg-slate-900" style={{width:"100%",height:"100%"}}>
+    <div className="relative bg-slate-950" style={{width:"100%",height:"100%"}}>
       {isLoading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-slate-900/80 z-50">
+        <div className="absolute inset-0 flex items-center justify-center bg-slate-950/80 z-50">
           <div className="text-slate-400">Loading agents...</div>
         </div>
       )}
@@ -106,7 +106,7 @@ function TopologyInner() {
         edgeTypes={edgeTypes}
         fitView
         attributionPosition="bottom-left"
-        className="bg-slate-900"
+        className="bg-slate-950"
       >
         <Background color="#334155" gap={20} size={1} />
         <Controls className="!bg-slate-800 !border-slate-700" />
@@ -119,11 +119,11 @@ function TopologyInner() {
             return "#64748b";
           }}
           maskColor="rgba(2,6,23,0.85)"
-          className="!bg-slate-900 !border-slate-700"
+          className="!bg-slate-950 !border-slate-700"
         />
       </ReactFlow>
 
-      <div className="absolute top-4 left-4 flex items-center gap-4 bg-slate-900/80 backdrop-blur rounded-lg px-4 py-2 border border-slate-700 text-xs">
+      <div className="absolute top-4 left-4 flex items-center gap-4 bg-slate-950/80 backdrop-blur rounded-lg px-4 py-2 border border-slate-700 text-xs">
         <span className="text-slate-400 font-medium">Agent Fleet</span>
         {[
           { color: "bg-green-500", label: "Active" },
@@ -138,7 +138,7 @@ function TopologyInner() {
         ))}
       </div>
 
-      <div className="absolute top-4 right-4 bg-slate-900/80 backdrop-blur rounded-lg px-3 py-2 border border-slate-700 text-xs flex items-center gap-2">
+      <div className="absolute top-4 right-4 bg-slate-950/80 backdrop-blur rounded-lg px-3 py-2 border border-slate-700 text-xs flex items-center gap-2">
         <div className={`w-2 h-2 rounded-full ${agentsList.some((a) => a.status === "active") ? "bg-green-500 animate-pulse" : "bg-slate-500"}`} />
         <span className="text-slate-300">
           {agentsList.filter((a) => a.status === "active").length} running · {agentsList.length} total
@@ -151,6 +151,6 @@ function TopologyInner() {
 export default function TopologyPage() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
-  if (!mounted) return <div className="h-full flex items-center justify-center bg-slate-900 text-slate-400">Loading topology...</div>;
+  if (!mounted) return <div className="h-full flex items-center justify-center bg-slate-950 text-slate-400">Loading topology...</div>;
   return <TopologyInner />;
 }

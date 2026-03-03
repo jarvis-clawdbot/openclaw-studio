@@ -71,7 +71,7 @@ export default function TasksPage() {
   };
 
   return (
-    <div className="h-screen bg-slate-900 p-6 overflow-hidden">
+    <div className="h-screen bg-slate-950 p-6 overflow-hidden">
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Tasks</h1>

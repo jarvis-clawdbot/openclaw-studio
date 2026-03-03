@@ -68,7 +68,7 @@ export default function TagsPage() {
   };
 
   return (
-    <div className="h-screen bg-slate-900 p-6 overflow-auto">
+    <div className="h-screen bg-slate-950 p-6 overflow-auto">
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Tags</h1>

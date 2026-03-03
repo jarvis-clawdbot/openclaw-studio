@@ -30,7 +30,7 @@ export default function NodesPage() {
   }, []);
 
   return (
-    <div className="h-screen bg-slate-900 p-6 overflow-auto">
+    <div className="h-screen bg-slate-950 p-6 overflow-auto">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-white">Paired Devices</h1>
         <p className="text-sm text-white/40 mt-1">Manage connected nodes</p>

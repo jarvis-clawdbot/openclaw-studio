@@ -2,9 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 
 type NavItem = { href: string; label: string; icon: string };
 type NavSection = { title: string; items: NavItem[] };
+
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
 
 const navSections: NavSection[] = [
   {
@@ -57,25 +60,43 @@ const navSections: NavSection[] = [
 
 export function SidebarNav() {
   const pathname = usePathname();
+  const [backendOk, setBackendOk] = useState(true);
+
+  useEffect(() => {
+    const check = async () => {
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/health`, { signal: AbortSignal.timeout(3000) });
+        setBackendOk(res.ok);
+      } catch {
+        setBackendOk(false);
+      }
+    };
+    check();
+    const interval = setInterval(check, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
-    <nav className="w-16 md:w-52 bg-slate-950 border-r border-slate-800 flex flex-col">
+    <nav className="w-16 md:w-56 bg-slate-950/80 backdrop-blur-xl border-r border-white/5 flex flex-col">
       {/* Logo */}
-      <div className="p-4 border-b border-slate-800">
-        <Link href="/" className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+      <div className="p-4 border-b border-white/5">
+        <Link href="/" className="flex items-center gap-2.5 group">
+          <div className="w-9 h-9 gradient-animated rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20 group-hover:shadow-blue-500/40 transition-shadow">
             <span className="text-white font-bold text-sm">OC</span>
           </div>
-          <span className="hidden md:block text-white font-semibold text-sm">OpenClaw Studio</span>
+          <div className="hidden md:block">
+            <span className="text-white font-semibold text-sm block leading-tight">OpenClaw</span>
+            <span className="text-white/30 text-[10px] block">Studio</span>
+          </div>
         </Link>
       </div>
 
       {/* Navigation Sections */}
-      <div className="flex-1 py-2 overflow-y-auto scrollbar-thin">
+      <div className="flex-1 py-3 overflow-y-auto dashboard-scroll">
         {navSections.map((section) => (
-          <div key={section.title} className="mb-1">
+          <div key={section.title} className="mb-2">
             <div className="px-4 py-1.5">
-              <span className="hidden md:block text-[10px] font-semibold uppercase tracking-wider text-slate-600">{section.title}</span>
+              <span className="hidden md:block text-[10px] font-semibold uppercase tracking-[0.15em] text-white/20">{section.title}</span>
             </div>
             <ul className="px-2 space-y-0.5">
               {section.items.map((item) => {
@@ -84,15 +105,18 @@ export function SidebarNav() {
                   <li key={item.href}>
                     <Link
                       href={item.href}
-                      className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg transition-colors text-sm ${
+                      className={`flex items-center gap-2.5 px-3 py-2 rounded-xl transition-all text-sm relative group ${
                         isActive
-                          ? "bg-blue-600/20 text-blue-400 border border-blue-500/20"
-                          : "text-slate-400 hover:bg-white/5 hover:text-slate-200"
+                          ? "bg-blue-600/15 text-blue-400"
+                          : "text-white/40 hover:bg-white/5 hover:text-white/80"
                       }`}
                       title={item.label}
                     >
-                      <span className="text-base">{item.icon}</span>
-                      <span className="hidden md:block font-medium">{item.label}</span>
+                      {isActive && (
+                        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-blue-400 rounded-full" />
+                      )}
+                      <span className="text-base flex-shrink-0">{item.icon}</span>
+                      <span className="hidden md:block font-medium truncate">{item.label}</span>
                     </Link>
                   </li>
                 );
@@ -103,15 +127,15 @@ export function SidebarNav() {
       </div>
 
       {/* Footer */}
-      <div className="p-3 border-t border-slate-800">
+      <div className="p-3 border-t border-white/5">
         <a
-          href="http://localhost:8000/api/health"
+          href={`${BACKEND_URL}/api/health`}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-xs text-slate-500 hover:text-slate-300 flex items-center gap-2"
+          className="text-xs text-white/30 hover:text-white/60 flex items-center gap-2 transition-colors"
         >
-          <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-          <span className="hidden md:block">Backend Online</span>
+          <div className={`w-2 h-2 rounded-full ${backendOk ? "bg-emerald-400 animate-pulse" : "bg-red-400"}`} />
+          <span className="hidden md:block">{backendOk ? "Backend Online" : "Backend Offline"}</span>
         </a>
       </div>
     </nav>

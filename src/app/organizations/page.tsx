@@ -61,7 +61,7 @@ export default function OrganizationsPage() {
   };
 
   return (
-    <div className="h-screen bg-slate-900 p-6 overflow-auto">
+    <div className="h-screen bg-slate-950 p-6 overflow-auto">
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Organizations</h1>
@@ -128,7 +128,7 @@ export default function OrganizationsPage() {
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                   placeholder="Acme Corp"
-                  className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
+                  className="w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
                 />
               </div>
               <div>
@@ -138,7 +138,7 @@ export default function OrganizationsPage() {
                   value={form.slug}
                   onChange={(e) => setForm({ ...form, slug: e.target.value })}
                   placeholder="acme-corp (auto-generated if empty)"
-                  className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white text-sm font-mono focus:outline-none focus:border-blue-500"
+                  className="w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2 text-white text-sm font-mono focus:outline-none focus:border-blue-500"
                 />
               </div>
               <div>
@@ -148,7 +148,7 @@ export default function OrganizationsPage() {
                   value={form.description}
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
                   placeholder="Brief description"
-                  className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
+                  className="w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
                 />
               </div>
               <div className="flex gap-3 pt-2">

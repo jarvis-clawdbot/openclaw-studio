@@ -67,7 +67,7 @@ export default function GatewaysPage() {
   };
 
   return (
-    <div className="h-screen bg-slate-900 p-6 overflow-auto">
+    <div className="h-screen bg-slate-950 p-6 overflow-auto">
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Gateway Management</h1>
@@ -164,7 +164,7 @@ export default function GatewaysPage() {
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                   placeholder="e.g. Production Gateway"
-                  className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
+                  className="w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
                 />
               </div>
               <div>
@@ -174,7 +174,7 @@ export default function GatewaysPage() {
                   value={form.url}
                   onChange={(e) => setForm({ ...form, url: e.target.value })}
                   placeholder="ws://localhost:18789"
-                  className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white text-sm font-mono focus:outline-none focus:border-blue-500"
+                  className="w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2 text-white text-sm font-mono focus:outline-none focus:border-blue-500"
                 />
               </div>
               <div>
@@ -184,7 +184,7 @@ export default function GatewaysPage() {
                   value={form.token}
                   onChange={(e) => setForm({ ...form, token: e.target.value })}
                   placeholder="Bearer token"
-                  className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
+                  className="w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
                 />
               </div>
               <div className="flex gap-3 pt-2">
