@@ -1,4 +1,5 @@
 from __future__ import annotations
+import time
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -9,8 +10,22 @@ from app.models import CostRecord, Agent, Task
 
 router = APIRouter()
 
+# ── Simple TTL caches ─────────────────────────────────────────
+_summary_cache: dict = {"data": None, "ts": 0.0}
+_by_agent_cache: dict = {"data": None, "ts": 0.0}
+_by_model_cache: dict = {"data": None, "ts": 0.0}
+_SUMMARY_TTL = 30.0   # analytics summary: 30s cache
+_AGENT_TTL   = 30.0
+_MODEL_TTL   = 60.0
+
+
 @router.get("/summary")
 async def get_usage_summary(db: AsyncSession = Depends(get_db)):
+    global _summary_cache
+    now = time.monotonic()
+    if _summary_cache["data"] is not None and (now - _summary_cache["ts"]) < _SUMMARY_TTL:
+        return _summary_cache["data"]
+
     result = await db.execute(
         select(
             func.sum(CostRecord.total_tokens),
@@ -19,11 +34,13 @@ async def get_usage_summary(db: AsyncSession = Depends(get_db)):
         )
     )
     row = result.one()
-    return {
+    data = {
         "total_tokens": row[0] or 0,
         "total_cost": row[1] or 0.0,
         "total_requests": row[2] or 0,
     }
+    _summary_cache = {"data": data, "ts": now}
+    return data
 
 @router.get("/daily")
 async def get_daily_usage(days: int = 30, db: AsyncSession = Depends(get_db)):
@@ -43,6 +60,11 @@ async def get_daily_usage(days: int = 30, db: AsyncSession = Depends(get_db)):
 
 @router.get("/by-agent")
 async def get_usage_by_agent(db: AsyncSession = Depends(get_db)):
+    global _by_agent_cache
+    now = time.monotonic()
+    if _by_agent_cache["data"] is not None and (now - _by_agent_cache["ts"]) < _AGENT_TTL:
+        return _by_agent_cache["data"]
+
     result = await db.execute(
         select(
             Agent.name,
@@ -52,10 +74,17 @@ async def get_usage_by_agent(db: AsyncSession = Depends(get_db)):
         .join(Agent, CostRecord.agent_id == Agent.id)
         .group_by(Agent.name)
     )
-    return [{"agent": row[0], "tokens": row[1] or 0, "cost": row[2] or 0.0} for row in result]
+    data = [{"agent": row[0], "tokens": row[1] or 0, "cost": row[2] or 0.0} for row in result]
+    _by_agent_cache = {"data": data, "ts": now}
+    return data
 
 @router.get("/by-model")
 async def get_usage_by_model(db: AsyncSession = Depends(get_db)):
+    global _by_model_cache
+    now = time.monotonic()
+    if _by_model_cache["data"] is not None and (now - _by_model_cache["ts"]) < _MODEL_TTL:
+        return _by_model_cache["data"]
+
     result = await db.execute(
         select(
             CostRecord.model,
@@ -65,7 +94,9 @@ async def get_usage_by_model(db: AsyncSession = Depends(get_db)):
         .group_by(CostRecord.model)
         .order_by(func.sum(CostRecord.total_tokens).desc())
     )
-    return [{"model": row[0], "tokens": row[1] or 0, "requests": row[2]} for row in result]
+    data = [{"model": row[0], "tokens": row[1] or 0, "requests": row[2]} for row in result]
+    _by_model_cache = {"data": data, "ts": now}
+    return data
 
 
 @router.get("/usage")

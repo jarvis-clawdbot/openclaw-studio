@@ -1,9 +1,12 @@
 """
-Live Agent Status - Pull real-time status from openclaw sessions.
+Live Agent Status — reads session JSONL files directly (no subprocess).
+Fast: file I/O only, with 5-second TTL cache.
 """
 from __future__ import annotations
+import asyncio
+import glob
 import json
-import subprocess
+import os
 import time
 from typing import List
 from fastapi import APIRouter
@@ -11,98 +14,139 @@ from pydantic import BaseModel
 
 router = APIRouter()
 
+OPENCLAW_DIR = os.path.expanduser("~/.openclaw/agents")
+
+# ── TTL cache ─────────────────────────────────────────────────
+_cache: dict = {"data": None, "ts": 0.0}
+_CACHE_TTL = 5.0  # seconds
+
 
 class AgentStatus(BaseModel):
     id: str
     name: str
-    status: str  # "active" | "idle"
+    status: str
     model: str | None
     session_key: str | None
     last_active_seconds: int | None
     total_tokens: int | None
+    role: str = ""
+    avatarColor: str = "#6366f1"
 
 
-# Map OpenClaw agentId to dashboard agent names
 AGENT_MAP = {
     "orchestrator": "Jarvis",
-    "researcher": "Wolff",
-    "coder": "Dobby",
-    "reviewer": "Claudy",
+    "researcher":   "Wolff",
+    "coder":        "Dobby",
+    "reviewer":     "Claudy",
 }
 
-REVERSE_MAP = {v.lower(): k for k, v in AGENT_MAP.items()}
+AGENT_META = {
+    "jarvis":  {"role": "Orchestrator",  "avatarColor": "#6366f1"},
+    "wolff":   {"role": "Researcher",    "avatarColor": "#0ea5e9"},
+    "dobby":   {"role": "Coder",         "avatarColor": "#10b981"},
+    "claudy":  {"role": "Reviewer",      "avatarColor": "#f59e0b"},
+}
 
 
-def _get_sessions() -> list:
-    """Get current sessions from openclaw CLI."""
+def _read_agent_status(agent_id: str) -> dict:
+    """Read the most recent active session JSONL and extract status. Pure file I/O."""
+    sessions_dir = os.path.join(OPENCLAW_DIR, agent_id, "sessions")
+    if not os.path.isdir(sessions_dir):
+        return {}
+
+    files = [f for f in glob.glob(os.path.join(sessions_dir, "*.jsonl"))
+             if ".reset." not in f]
+    if not files:
+        return {}
+
+    latest = max(files, key=os.path.getmtime)
+    session_key = os.path.basename(latest).replace(".jsonl", "")
+
+    last_ts: str | None = None
+    last_model: str | None = None
+    total_tokens: int | None = None
+
     try:
-        result = subprocess.run(
-            ["openclaw", "sessions", "--json", "--all-agents"],
-            capture_output=True, text=True, timeout=10
-        )
-        if result.returncode == 0:
-            data = json.loads(result.stdout)
-            return data.get("sessions", [])
+        with open(latest, "rb") as f:
+            f.seek(0, 2)
+            size = f.tell()
+            f.seek(max(0, size - 8192))
+            tail = f.read().decode("utf-8", errors="ignore")
+
+        for line in reversed(tail.splitlines()):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if last_ts is None and obj.get("timestamp"):
+                last_ts = obj["timestamp"]
+            msg = obj.get("message", {}) or {}
+            if last_model is None and msg.get("model"):
+                last_model = msg["model"]
+            usage = msg.get("usage") or obj.get("usage") or {}
+            if total_tokens is None and usage.get("totalTokens"):
+                total_tokens = usage["totalTokens"]
+            if last_ts and last_model:
+                break
     except Exception:
         pass
-    return []
+
+    return {"session_key": session_key, "last_ts": last_ts,
+            "model": last_model, "total_tokens": total_tokens}
 
 
 @router.get("/live", response_model=List[AgentStatus])
 async def get_live_status():
-    """Get live agent status from openclaw sessions."""
-    sessions = _get_sessions()
-    now_ms = time.time() * 1000
-    
-    # Build status map from sessions
-    agent_status = {}
-    for s in sessions:
-        agent_id = s.get("agentId")
-        if not agent_id:
-            continue
-        
-        # Map to dashboard agent name
-        agent_name = AGENT_MAP.get(agent_id, agent_id.title())
-        agent_key = agent_name.lower()
-        
-        updated_at = s.get("updatedAt", 0)
-        age_ms = now_ms - updated_at if updated_at else 999999999
-        age_sec = int(age_ms / 1000)
-        
-        # Active if updated in last 5 minutes
-        is_active = age_sec < 300
-        
-        if agent_key not in agent_status or age_sec < agent_status[agent_key]["age"]:
-            agent_status[agent_key] = {
-                "id": agent_key,
-                "name": agent_name,
-                "status": "active" if is_active else "idle",
-                "model": s.get("model"),
-                "session_key": s.get("key"),
-                "last_active_seconds": age_sec,
-                "total_tokens": s.get("totalTokens"),
-                "age": age_sec,
-            }
-    
-    # Add known agents that aren't in sessions
-    all_agents = ["jarvis", "wolff", "dobby", "claudy"]
-    for agent_key in all_agents:
-        if agent_key not in agent_status:
-            agent_status[agent_key] = {
-                "id": agent_key,
-                "name": agent_key.title(),
-                "status": "idle",
-                "model": None,
-                "session_key": None,
-                "last_active_seconds": None,
-                "total_tokens": None,
-                "age": 999999,
-            }
-    
-    # Convert to list and remove "age" helper field
+    """Get live agent status — cached 5s, reads JSONL files directly."""
+    global _cache
+    now_mono = time.monotonic()
+
+    if _cache["data"] is not None and (now_mono - _cache["ts"]) < _CACHE_TTL:
+        return _cache["data"]
+
+    now_ts = time.time()
+    loop = asyncio.get_event_loop()
+
+    # Run all 4 file reads concurrently in the thread pool
+    tasks = [
+        loop.run_in_executor(None, _read_agent_status, agent_id)
+        for agent_id in AGENT_MAP
+    ]
+    infos = await asyncio.gather(*tasks)
+
     result = []
-    for agent in agent_status.values():
-        agent.pop("age", None)
-        result.append(AgentStatus(**agent))
-    
+    for (agent_id, display_name), info in zip(AGENT_MAP.items(), infos):
+        agent_key = display_name.lower()
+        meta = AGENT_META.get(agent_key, {})
+
+        last_active_seconds: int | None = None
+        status = "idle"
+
+        if info.get("last_ts"):
+            try:
+                from datetime import datetime
+                ts_str = info["last_ts"]
+                dt = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+                age_sec = int(now_ts - dt.timestamp())
+                last_active_seconds = age_sec
+                status = "active" if age_sec < 300 else "idle"
+            except Exception:
+                pass
+
+        result.append(AgentStatus(
+            id=agent_key,
+            name=display_name,
+            status=status,
+            model=info.get("model"),
+            session_key=info.get("session_key"),
+            last_active_seconds=last_active_seconds,
+            total_tokens=info.get("total_tokens"),
+            role=meta.get("role", ""),
+            avatarColor=meta.get("avatarColor", "#6366f1"),
+        ))
+
+    _cache = {"data": result, "ts": now_mono}
     return result

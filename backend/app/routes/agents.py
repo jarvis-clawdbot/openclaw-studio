@@ -3,8 +3,10 @@ Agents API - Manage agents with real-time status.
 """
 from __future__ import annotations
 
+import asyncio
+import glob
 import json
-import subprocess
+import os
 import time
 from datetime import datetime, timezone
 from typing import Optional
@@ -19,7 +21,12 @@ from app.models import Agent
 
 router = APIRouter()
 
-# Map OpenClaw agentId to dashboard agent names
+OPENCLAW_DIR = os.path.expanduser("~/.openclaw/agents")
+
+# ── TTL cache ─────────────────────────────────────────────────
+_live_cache: dict = {"data": None, "ts": 0.0}
+_CACHE_TTL = 5.0  # seconds
+
 AGENT_MAP = {
     "orchestrator": "Jarvis",
     "researcher": "Wolff",
@@ -42,19 +49,101 @@ COLOR_MAP = {
 }
 
 
-def _get_live_sessions() -> dict:
-    """Get current sessions from openclaw CLI."""
+def _read_agent_session(agent_id: str) -> dict:
+    """Read the most recent active session JSONL for an agent. Pure file I/O — no subprocess."""
+    sessions_dir = os.path.join(OPENCLAW_DIR, agent_id, "sessions")
+    if not os.path.isdir(sessions_dir):
+        return {}
+
+    files = [f for f in glob.glob(os.path.join(sessions_dir, "*.jsonl"))
+             if ".reset." not in f]
+    if not files:
+        return {}
+
+    latest = max(files, key=os.path.getmtime)
+    session_key = os.path.basename(latest).replace(".jsonl", "")
+
+    last_ts: str | None = None
+    last_model: str | None = None
+    total_tokens: int | None = None
+
     try:
-        result = subprocess.run(
-            ["openclaw", "sessions", "--json", "--all-agents"],
-            capture_output=True, text=True, timeout=10
-        )
-        if result.returncode == 0:
-            data = json.loads(result.stdout)
-            return data.get("sessions", [])
+        with open(latest, "rb") as f:
+            f.seek(0, 2)
+            size = f.tell()
+            f.seek(max(0, size - 8192))
+            tail = f.read().decode("utf-8", errors="ignore")
+
+        for line in reversed(tail.splitlines()):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if last_ts is None and obj.get("timestamp"):
+                last_ts = obj["timestamp"]
+            msg = obj.get("message", {}) or {}
+            if last_model is None and msg.get("model"):
+                last_model = msg["model"]
+            usage = msg.get("usage") or obj.get("usage") or {}
+            if total_tokens is None and usage.get("totalTokens"):
+                total_tokens = usage["totalTokens"]
+            if last_ts and last_model:
+                break
     except Exception:
         pass
-    return []
+
+    return {"session_key": session_key, "last_ts": last_ts,
+            "model": last_model, "total_tokens": total_tokens}
+
+
+async def _build_live_status() -> list:
+    """Build live agent status from JSONL files (async, cached 5s)."""
+    global _live_cache
+    now_mono = time.monotonic()
+
+    if _live_cache["data"] is not None and (now_mono - _live_cache["ts"]) < _CACHE_TTL:
+        return _live_cache["data"]
+
+    now_ts = time.time()
+    loop = asyncio.get_event_loop()
+
+    tasks = [loop.run_in_executor(None, _read_agent_session, agent_id)
+             for agent_id in AGENT_MAP]
+    infos = await asyncio.gather(*tasks)
+
+    result = []
+    for (agent_id, display_name), info in zip(AGENT_MAP.items(), infos):
+        agent_key = display_name.lower()
+
+        last_active_seconds: int | None = None
+        status = "idle"
+
+        if info.get("last_ts"):
+            try:
+                dt = datetime.fromisoformat(info["last_ts"].replace("Z", "+00:00"))
+                age_sec = int(now_ts - dt.timestamp())
+                last_active_seconds = age_sec
+                status = "active" if age_sec < 300 else "idle"
+            except Exception:
+                pass
+
+        result.append({
+            "id": agent_key,
+            "name": display_name,
+            "status": status,
+            "model": info.get("model"),
+            "role": ROLE_MAP.get(agent_key, "Agent"),
+            "avatarColor": COLOR_MAP.get(agent_key, "#6b7280"),
+            "session_key": info.get("session_key"),
+            "last_active_seconds": last_active_seconds,
+            "total_tokens": info.get("total_tokens"),
+        })
+
+    _live_cache = {"data": result, "ts": now_mono}
+    return result
 
 
 class AgentResponse(BaseModel):
@@ -86,59 +175,8 @@ class AgentUpdate(BaseModel):
 
 @router.get("/live")
 async def get_live_agents():
-    """Get real-time agent status from openclaw sessions."""
-    sessions = _get_live_sessions()
-    now_ms = time.time() * 1000
-    
-    # Build status from live sessions
-    agent_status = {}
-    for s in sessions:
-        agent_id = s.get("agentId")
-        if not agent_id:
-            continue
-        
-        agent_name = AGENT_MAP.get(agent_id, agent_id.title())
-        agent_key = agent_name.lower()
-        
-        updated_at = s.get("updatedAt", 0)
-        age_ms = now_ms - updated_at if updated_at else 999999999
-        age_sec = int(age_ms / 1000)
-        is_active = age_sec < 1800  # active if updated within last 30 minutes
-        
-        if agent_key not in agent_status or age_sec < agent_status[agent_key].get("_age", 999999):
-            agent_status[agent_key] = {
-                "id": agent_key,
-                "name": agent_name,
-                "status": "active" if is_active else "idle",
-                "model": s.get("model"),
-                "role": ROLE_MAP.get(agent_key, "Agent"),
-                "avatarColor": COLOR_MAP.get(agent_key, "#6b7280"),
-                "session_key": s.get("key"),
-                "last_active_seconds": age_sec,
-                "total_tokens": s.get("totalTokens"),
-                "_age": age_sec,
-            }
-    
-    # Add known agents not in sessions (idle)
-    for agent_key in ["jarvis", "wolff", "dobby", "claudy"]:
-        if agent_key not in agent_status:
-            agent_status[agent_key] = {
-                "id": agent_key,
-                "name": agent_key.title(),
-                "status": "idle",
-                "model": None,
-                "role": ROLE_MAP.get(agent_key, "Agent"),
-                "avatarColor": COLOR_MAP.get(agent_key, "#6b7280"),
-                "session_key": None,
-                "last_active_seconds": None,
-                "total_tokens": None,
-            }
-    
-    # Clean up internal fields
-    for agent in agent_status.values():
-        agent.pop("_age", None)
-    
-    return list(agent_status.values())
+    """Get real-time agent status from session JSONL files (cached 5s)."""
+    return await _build_live_status()
 
 
 @router.get("")
@@ -147,22 +185,19 @@ async def list_agents(
     db: AsyncSession = Depends(get_db)
 ):
     """List all agents from database (supplement with live status)."""
-    # Get live status first
     live_status = {}
     try:
-        for agent in await get_live_agents():
+        for agent in await _build_live_status():
             live_status[agent["name"].lower()] = agent
     except Exception:
         pass
-    
-    # Get from database
+
     query = select(Agent)
     if status:
         query = query.where(Agent.status == status)
     result = await db.execute(query)
     agents = result.scalars().all()
-    
-    # Merge with live status
+
     output = []
     for a in agents:
         agent_key = a.name.lower() if a.name else ""
@@ -178,7 +213,7 @@ async def list_agents(
             "created_at": a.created_at,
             "updated_at": a.updated_at,
         })
-    
+
     return output
 
 
