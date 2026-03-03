@@ -6,6 +6,7 @@ import { Task, TaskPriority, TaskType } from "@/stores/taskStore";
 
 interface TaskCardProps {
   task: Task;
+  onClick?: (taskId: string) => void;
 }
 
 const priorityColors: Record<TaskPriority, string> = {
@@ -30,7 +31,7 @@ const assigneeColors: Record<string, string> = {
   claudy: "bg-yellow-500",
 };
 
-export function TaskCard({ task }: TaskCardProps) {
+export function TaskCard({ task, onClick }: TaskCardProps) {
   const {
     attributes,
     listeners,
@@ -52,6 +53,7 @@ export function TaskCard({ task }: TaskCardProps) {
       style={style}
       {...attributes}
       {...listeners}
+      onClick={(e) => { e.stopPropagation(); onClick?.(task.id); }}
       className="bg-slate-800 rounded-lg p-3 cursor-grab active:cursor-grabbing border border-slate-700 hover:border-slate-500 transition-colors"
     >
       <div className="flex items-start justify-between gap-2 mb-2">

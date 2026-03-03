@@ -39,6 +39,7 @@ class BoardModel(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String, nullable=False)
     description = Column(String, nullable=True)
+    group_name = Column(String, nullable=True, default="General")
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
@@ -92,6 +93,7 @@ class Board(BaseModel):
     id: Optional[int] = None
     name: str
     description: Optional[str] = None
+    group_name: Optional[str] = "General"
     columns: List[Column] = []
     created_at: Optional[datetime] = None
 
@@ -99,6 +101,7 @@ class Board(BaseModel):
 class BoardCreate(BaseModel):
     name: str
     description: Optional[str] = None
+    group_name: Optional[str] = "General"
 
 
 class ColumnCreate(BaseModel):
@@ -152,6 +155,7 @@ async def list_boards():
                 id=b.id,
                 name=b.name,
                 description=b.description,
+                group_name=b.group_name or "General",
                 columns=cols,
                 created_at=b.created_at,
             ))
@@ -165,7 +169,7 @@ async def create_board(data: BoardCreate):
     """Create a new board."""
     db = SessionLocal()
     try:
-        board = BoardModel(name=data.name, description=data.description)
+        board = BoardModel(name=data.name, description=data.description, group_name=data.group_name or "General")
         db.add(board)
         db.commit()
         db.refresh(board)
@@ -180,6 +184,7 @@ async def create_board(data: BoardCreate):
             id=board.id,
             name=board.name,
             description=board.description,
+            group_name=board.group_name or "General",
             columns=[],
             created_at=board.created_at,
         )
@@ -222,6 +227,7 @@ async def get_board(board_id: int):
             id=board.id,
             name=board.name,
             description=board.description,
+            group_name=board.group_name or "General",
             columns=cols,
             created_at=board.created_at,
         )
@@ -229,7 +235,16 @@ async def get_board(board_id: int):
         db.close()
 
 
-@router.delete("/{board_id}")
+@router.get("/groups/list")
+async def list_board_groups():
+    """List all unique board groups."""
+    db = SessionLocal()
+    try:
+        from sqlalchemy import func
+        groups = db.query(BoardModel.group_name).distinct().all()
+        return {"groups": sorted(set(g[0] or "General" for g in groups))}
+    finally:
+        db.close()
 async def delete_board(board_id: int):
     """Delete board and all its columns/cards."""
     db = SessionLocal()

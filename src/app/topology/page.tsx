@@ -62,8 +62,8 @@ function buildNodesFromAgents(agents: { id: string; name: string; status: string
 
 function TopologyInner() {
   const { agentsList, selectedAgent, isLoading, loadAgents, setSelectedAgent } = useTopologyStore();
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(BASE_EDGES);
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(BASE_EDGES);
 
   // Start real-time sync on mount
   useEffect(() => {
@@ -82,7 +82,10 @@ function TopologyInner() {
   }, [agentsList, setNodes, setEdges]);
 
   const onConnect = useCallback((params: Connection) => setEdges((eds) => addEdge(params, eds)), [setEdges]);
-  const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => setSelectedAgent(node.id), [setSelectedAgent]);
+  const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
+    const agent = agentsList.find((a) => a.name.toLowerCase() === node.id || a.id === node.id) ?? null;
+    setSelectedAgent(agent);
+  }, [setSelectedAgent, agentsList]);
 
   return (
     <div className="relative bg-slate-900" style={{width:"100%",height:"100%"}}>
