@@ -1,0 +1,210 @@
+"use client";
+
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from "recharts";
+import { useAnalyticsStore } from "@/stores/analyticsStore";
+import { useEffect, useState } from "react";
+
+// Mock fallback data
+const mockUsageData = [
+  { timestamp: Date.now() - 6 * 60 * 60 * 1000, inputTokens: 2500, outputTokens: 1200, requests: 15 },
+  { timestamp: Date.now() - 5 * 60 * 60 * 1000, inputTokens: 3200, outputTokens: 1500, requests: 20 },
+  { timestamp: Date.now() - 4 * 60 * 60 * 1000, inputTokens: 1800, outputTokens: 900, requests: 12 },
+  { timestamp: Date.now() - 3 * 60 * 60 * 1000, inputTokens: 4100, outputTokens: 2000, requests: 28 },
+  { timestamp: Date.now() - 2 * 60 * 60 * 1000, inputTokens: 2800, outputTokens: 1300, requests: 18 },
+  { timestamp: Date.now() - 1 * 60 * 60 * 1000, inputTokens: 3500, outputTokens: 1700, requests: 22 },
+  { timestamp: Date.now(), inputTokens: 4200, outputTokens: 2100, requests: 30 },
+];
+
+const mockAgentUsage = [
+  { agentId: "jarvis", agentName: "Jarvis", inputTokens: 8500, outputTokens: 4200, totalTokens: 12700, requests: 85 },
+  { agentId: "wolff", agentName: "Wolff", inputTokens: 6300, outputTokens: 3100, totalTokens: 9400, requests: 62 },
+  { agentId: "dobby", agentName: "Dobby", inputTokens: 9200, outputTokens: 4600, totalTokens: 13800, requests: 93 },
+  { agentId: "claudy", agentName: "Claudy", inputTokens: 4100, outputTokens: 2000, totalTokens: 6100, requests: 41 },
+];
+
+const mockModelDistribution = [
+  { name: "GLM-5", value: 65, color: "#3b82f6" },
+  { name: "GLM-4.7", value: 25, color: "#22c55e" },
+  { name: "GLM-4", value: 10, color: "#a855f7" },
+];
+
+export default function AnalyticsPage() {
+  const { stats, range, isLoading, loadStats, setRange } = useAnalyticsStore();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+  // Load stats from backend on mount
+  useEffect(() => {
+    loadStats("24h");
+  }, [loadStats]);
+
+  const formatTime = (ts: number) => {
+    const d = new Date(ts);
+    return `${d.getHours().toString().padStart(2, "0")}:00`;
+  };
+
+  // Use real data if available, otherwise fallback to mock
+  const chartData = stats ? mockUsageData : mockUsageData;
+  const agentData = stats ? stats.agents.map(a => ({
+    agentId: a.id,
+    agentName: a.name,
+    inputTokens: a.inputTokens,
+    outputTokens: a.outputTokens,
+    totalTokens: a.inputTokens + a.outputTokens,
+    requests: a.requests,
+  })) : mockAgentUsage;
+
+  const modelData = stats ? stats.models.map((m, i) => ({
+    name: m.model.split("/").pop() || m.model,
+    value: m.inputTokens + m.outputTokens,
+    color: ["#3b82f6", "#22c55e", "#a855f7", "#f59e0b", "#ef4444"][i % 5],
+  })) : mockModelDistribution;
+
+  const totalInput = stats?.totalInputTokens ?? chartData.reduce((sum, d) => sum + d.inputTokens, 0);
+  const totalOutput = stats?.totalOutputTokens ?? chartData.reduce((sum, d) => sum + d.outputTokens, 0);
+  const totalRequests = stats?.totalRequests ?? mockAgentUsage.reduce((sum, a) => sum + a.requests, 0);
+
+  if (!mounted) return (
+    <div className="h-screen bg-slate-900 flex items-center justify-center">
+      <div className="text-slate-500">Loading analytics...</div>
+    </div>
+  );
+
+  return (
+    <div className="h-screen bg-slate-900 p-6 overflow-auto">
+      <div className="mb-6 flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-white">Analytics Dashboard</h1>
+        <div className="flex gap-2">
+          {(["24h", "7d", "30d"] as const).map((r) => (
+            <button
+              key={r}
+              onClick={() => setRange(r)}
+              className={`px-3 py-1 rounded text-sm ${
+                range === r ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+              }`}
+            >
+              {r}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {isLoading && (
+        <div className="text-slate-400 text-sm mb-4">Loading stats from backend...</div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        {[
+          { label: "Total Input Tokens", value: totalInput.toLocaleString(), color: "bg-blue-600" },
+          { label: "Total Output Tokens", value: totalOutput.toLocaleString(), color: "bg-green-600" },
+          { label: "Requests", value: totalRequests.toLocaleString(), color: "bg-purple-600" },
+          { label: "Avg Tokens/Req", value: Math.round((totalInput + totalOutput) / totalRequests).toLocaleString(), color: "bg-yellow-600" },
+        ].map((card) => (
+          <div key={card.label} className="bg-slate-800 rounded-lg p-4">
+            <div className="text-slate-400 text-sm">{card.label}</div>
+            <div className="text-2xl font-bold text-white mt-1">{card.value}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-slate-800 rounded-lg p-4">
+          <h3 className="text-lg font-semibold text-white mb-4">Token Usage Over Time</h3>
+          <div style={{ height: 300 }}>
+            <ResponsiveContainer width={600} height={280}>
+              <LineChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                <XAxis 
+                  dataKey="timestamp" 
+                  tickFormatter={formatTime} 
+                  stroke="#64748b"
+                  tick={{ fill: "#94a3b8", fontSize: 12 }}
+                />
+                <YAxis stroke="#64748b" tick={{ fill: "#94a3b8", fontSize: 12 }} />
+                <Tooltip 
+                  contentStyle={{ backgroundColor: "#1e293b", border: "none", borderRadius: 8 }}
+                  labelFormatter={(ts) => formatTime(ts as number)}
+                />
+                <Line type="monotone" dataKey="inputTokens" stroke="#3b82f6" strokeWidth={2} dot={false} name="Input" />
+                <Line type="monotone" dataKey="outputTokens" stroke="#22c55e" strokeWidth={2} dot={false} name="Output" />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className="bg-slate-800 rounded-lg p-4">
+          <h3 className="text-lg font-semibold text-white mb-4">Agent Usage Breakdown</h3>
+          <div style={{ height: 300 }}>
+            <ResponsiveContainer width={600} height={280}>
+              <BarChart data={agentData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                <XAxis dataKey="agentName" stroke="#64748b" tick={{ fill: "#94a3b8", fontSize: 12 }} />
+                <YAxis stroke="#64748b" tick={{ fill: "#94a3b8", fontSize: 12 }} />
+                <Tooltip 
+                  contentStyle={{ backgroundColor: "#1e293b", border: "none", borderRadius: 8 }}
+                />
+                <Bar dataKey="inputTokens" fill="#3b82f6" name="Input" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="outputTokens" fill="#22c55e" name="Output" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className="bg-slate-800 rounded-lg p-4">
+          <h3 className="text-lg font-semibold text-white mb-4">Model Distribution</h3>
+          <div style={{ height: 300 }}>
+            <ResponsiveContainer width={600} height={280}>
+              <PieChart>
+                <Pie
+                  data={modelData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={100}
+                  paddingAngle={2}
+                  dataKey="value"
+                  nameKey="name"
+                >
+                  {modelData.map((entry, index) => (
+                    <Cell key={index} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip 
+                  contentStyle={{ backgroundColor: "#1e293b", border: "none", borderRadius: 8 }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className="bg-slate-800 rounded-lg p-4">
+          <h3 className="text-lg font-semibold text-white mb-4">Agent Details</h3>
+          <div className="overflow-auto" style={{ maxHeight: 260 }}>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-slate-400 border-b border-slate-700">
+                  <th className="text-left py-2">Agent</th>
+                  <th className="text-right py-2">Input</th>
+                  <th className="text-right py-2">Output</th>
+                  <th className="text-right py-2">Total</th>
+                  <th className="text-right py-2">Reqs</th>
+                </tr>
+              </thead>
+              <tbody>
+                {agentData.map((agent) => (
+                  <tr key={agent.agentId} className="text-slate-300 border-b border-slate-700/50">
+                    <td className="py-2">{agent.agentName}</td>
+                    <td className="text-right">{agent.inputTokens.toLocaleString()}</td>
+                    <td className="text-right">{agent.outputTokens.toLocaleString()}</td>
+                    <td className="text-right font-medium">{agent.totalTokens.toLocaleString()}</td>
+                    <td className="text-right">{agent.requests}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

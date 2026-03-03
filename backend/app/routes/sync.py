@@ -1,0 +1,47 @@
+"""Sync API - Trigger dashboard database sync with gateway"""
+from fastapi import APIRouter, HTTPException
+from app.services.gateway_sync import sync_agent_status, mark_agent_active, mark_agent_idle
+from app.services.ws_manager import ws_manager
+import logging
+
+router = APIRouter()
+logger = logging.getLogger(__name__)
+
+@router.post("/agent/{agent_name}/active")
+async def set_agent_active(agent_name: str, session_key: str = None):
+    """Mark an agent as active"""
+    success = await mark_agent_active(agent_name, session_key)
+    if not success:
+        raise HTTPException(status_code=404, detail=f"Agent {agent_name} not found")
+    # Broadcast to WebSocket clients
+    await ws_manager.broadcast({
+        "type": "agent.status",
+        "agent": {"name": agent_name, "status": "active"}
+    })
+    return {"status": "success", "agent": agent_name, "state": "active"}
+
+@router.post("/agent/{agent_name}/idle")
+async def set_agent_idle(agent_name: str):
+    """Mark an agent as idle"""
+    success = await mark_agent_idle(agent_name)
+    if not success:
+        raise HTTPException(status_code=404, detail=f"Agent {agent_name} not found")
+    # Broadcast to WebSocket clients
+    await ws_manager.broadcast({
+        "type": "agent.status",
+        "agent": {"name": agent_name, "status": "idle"}
+    })
+    return {"status": "success", "agent": agent_name, "state": "idle"}
+
+@router.post("/agent/{agent_name}/status")
+async def set_agent_status(agent_name: str, status: str, session_key: str = None):
+    """Set agent status directly"""
+    success = await sync_agent_status(agent_name, status, session_key)
+    if not success:
+        raise HTTPException(status_code=404, detail=f"Agent {agent_name} not found")
+    # Broadcast to WebSocket clients
+    await ws_manager.broadcast({
+        "type": "agent.status",
+        "agent": {"name": agent_name, "status": status}
+    })
+    return {"status": "success", "agent": agent_name, "state": status}
