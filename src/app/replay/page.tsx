@@ -25,6 +25,7 @@ export default function ReplayPage() {
     setPlaybackSpeed,
   } = useReplayStore();
   const [visibleEvents, setVisibleEvents] = useState<ReplayEvent[]>([]);
+  const [loadingEvents, setLoadingEvents] = useState(false);
   const timelineRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -67,11 +68,24 @@ export default function ReplayPage() {
     return `${mins}m ${secs}s`;
   };
 
-  const handleSessionSelect = (session: ReplaySession) => {
-    selectSession(session);
-    setCurrentTime(session.startedAt);
+  const handleSessionSelect = async (session: ReplaySession) => {
     setVisibleEvents([]);
     setPlaying(false);
+    setLoadingEvents(true);
+    selectSession(session);
+    setCurrentTime(session.startedAt);
+    try {
+      const res = await fetch(`http://localhost:8000/api/replay/sessions/${session.id}/events`);
+      if (res.ok) {
+        const events: ReplayEvent[] = await res.json();
+        const enriched = { ...session, events };
+        selectSession(enriched);
+      }
+    } catch (e) {
+      console.error("Failed to load replay events:", e);
+    } finally {
+      setLoadingEvents(false);
+    }
   };
 
   const handlePlay = () => {
@@ -113,6 +127,18 @@ export default function ReplayPage() {
         ) : selectedSession ? (
           <>
             <div className="flex-1 overflow-y-auto p-4">
+              {loadingEvents ? (
+                <div className="flex items-center justify-center h-full text-slate-400">
+                  <div className="text-center">
+                    <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-3" />
+                    <p>Loading events...</p>
+                  </div>
+                </div>
+              ) : visibleEvents.length === 0 ? (
+                <div className="flex items-center justify-center h-full text-slate-500">
+                  Press ▶ to start replay
+                </div>
+              ) : (
               <div className="max-w-3xl mx-auto space-y-2">
                 {visibleEvents.map((event) => (
                   <div key={event.id} className={`p-3 rounded-lg border-l-4 ${eventColors[event.type] ?? "bg-slate-800 border-slate-500"}`}>
@@ -127,6 +153,7 @@ export default function ReplayPage() {
                   </div>
                 ))}
               </div>
+              )}
             </div>
 
             <div className="bg-slate-800 border-t border-slate-700 p-4">

@@ -15,6 +15,7 @@ from app.services.gateway_client import gateway_client
 from app.services.ws_manager import ws_manager
 from app.services.self_healing import monitor_loop
 from app.services.notion_sync import notion_outbound_worker, notion_inbound_poll
+from app.services.notion_board_sync import notion_board_sync
 from app.services.session_sync import session_sync_loop
 from app.utils.seed import seed
 
@@ -51,6 +52,7 @@ async def lifespan(app: FastAPI):
         _tasks.append(asyncio.create_task(notion_outbound_worker()))
         if settings.notion_sync_mode == "poll":
             _tasks.append(asyncio.create_task(notion_inbound_poll()))
+        _tasks.append(asyncio.create_task(notion_board_sync()))
 
     logger.info("Dashboard Vision ready")
     yield

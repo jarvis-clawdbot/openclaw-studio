@@ -128,12 +128,22 @@ async def _process_outbound_batch():
                 logger.error(f"Notion sync error for item {item.id}: {e}")
 
 
+REVERSE_STATUS_MAP = {v: k for k, v in STATUS_MAP.items()}
+REVERSE_PRIORITY_MAP = {v: k for k, v in PRIORITY_MAP.items()}
+
+DB_NAME_MAP = {
+    "notion_openclaw_db": "OpenClaw Tasks",
+    "notion_personal_db": "Personal Tasks",
+    "notion_ideas_db": "Ideas Backlog",
+}
+
+
 async def notion_inbound_poll():
-    """Poll Notion for external changes every 60 seconds."""
+    """Poll all Notion databases for external changes every 60 seconds.
+    Creates new local tasks for pages not yet synced."""
     if not settings.notion_api_key:
         return
     logger.info("Notion inbound poll started")
-    last_poll = datetime.utcnow()
 
     while True:
         await asyncio.sleep(settings.notion_poll_interval_seconds)
@@ -144,42 +154,90 @@ async def notion_inbound_poll():
                     "Notion-Version": "2022-06-28",
                     "Content-Type": "application/json"
                 }
-                for db_id in [settings.notion_openclaw_db]:
+                db_ids = [
+                    settings.notion_openclaw_db,
+                    settings.notion_personal_db,
+                    settings.notion_ideas_db,
+                ]
+                for db_id in db_ids:
+                    if not db_id:
+                        continue
                     r = await client.post(
                         f"https://api.notion.com/v1/databases/{db_id}/query",
                         headers=headers,
-                        json={
-                            "filter": {
-                                "timestamp": "last_edited_time",
-                                "last_edited_time": {"after": last_poll.isoformat() + "Z"}
-                            }
-                        }
+                        json={}
                     )
                     if r.status_code != 200:
+                        logger.warning(f"Notion query failed for {db_id}: {r.status_code}")
                         continue
                     pages = r.json().get("results", [])
-                    async with async_session() as db:
-                        for page in pages:
-                            page_id = page["id"]
-                            result = await db.execute(select(Task).where(Task.notion_page_id == page_id))
-                            task = result.scalar_one_or_none()
-                            if not task:
-                                continue
-                            props = page.get("properties", {})
-                            incoming_hash = hashlib.md5(json.dumps(props, sort_keys=True).encode()).hexdigest()
-                            if incoming_hash == task.last_synced_hash:
-                                continue  # Our own change
-                            # Apply changes
-                            status_val = props.get("Status", {}).get("select", {})
-                            if status_val:
-                                reverse = {v: k for k, v in STATUS_MAP.items()}
-                                task.status = reverse.get(status_val.get("name", ""), task.status)
-                            task.last_synced_hash = incoming_hash
-                            await db.commit()
-                            await ws_manager.broadcast({
-                                "type": "task.updated",
-                                "payload": {"task_id": task.id, "source": "notion"}
-                            })
-            last_poll = datetime.utcnow()
+                    await _sync_notion_pages(pages, db_id)
+                    await asyncio.sleep(0.5)  # Rate limit between DBs
         except Exception as e:
             logger.error(f"Notion inbound poll error: {e}")
+
+
+async def _sync_notion_pages(pages: list, db_id: str):
+    """Sync Notion pages to local tasks — create new or update existing."""
+    async with async_session() as db:
+        for page in pages:
+            page_id = page["id"]
+            props = page.get("properties", {})
+
+            title_parts = props.get("Name", {}).get("title", [])
+            title = title_parts[0].get("plain_text", "Untitled") if title_parts else "Untitled"
+
+            status_sel = props.get("Status", {}).get("select", {})
+            status_name = status_sel.get("name", "") if status_sel else ""
+            local_status = REVERSE_STATUS_MAP.get(status_name, "backlog")
+
+            priority_sel = props.get("Priority", {}).get("select", {})
+            priority_name = priority_sel.get("name", "") if priority_sel else ""
+            local_priority = REVERSE_PRIORITY_MAP.get(priority_name, "P2")
+
+            incoming_hash = hashlib.md5(json.dumps(props, sort_keys=True).encode()).hexdigest()
+
+            result = await db.execute(select(Task).where(Task.notion_page_id == page_id))
+            task = result.scalar_one_or_none()
+
+            if task:
+                if incoming_hash == task.last_synced_hash:
+                    continue
+                task.title = title
+                task.status = local_status
+                task.priority = local_priority
+                task.last_synced_hash = incoming_hash
+                task.notion_sync_status = "synced"
+                await db.commit()
+                await ws_manager.broadcast({
+                    "type": "task.updated",
+                    "payload": {"task_id": task.id, "source": "notion"}
+                })
+            else:
+                # Determine source tag from DB ID
+                if db_id == settings.notion_openclaw_db:
+                    source = "openclaw"
+                elif db_id == settings.notion_personal_db:
+                    source = "personal"
+                else:
+                    source = "ideas"
+
+                new_task = Task(
+                    title=title,
+                    description=f"Synced from Notion ({source})",
+                    status=local_status,
+                    priority=local_priority,
+                    source=source,
+                    is_idea=(source == "ideas"),
+                    notion_page_id=page_id,
+                    notion_sync_status="synced",
+                    last_synced_hash=incoming_hash,
+                )
+                db.add(new_task)
+                await db.commit()
+                await db.refresh(new_task)
+                logger.info(f"Created task from Notion: {title} (page {page_id[:12]})")
+                await ws_manager.broadcast({
+                    "type": "task.created",
+                    "payload": {"task_id": new_task.id, "source": "notion"}
+                })
