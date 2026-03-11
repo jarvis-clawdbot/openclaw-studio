@@ -1,183 +1,147 @@
 #!/bin/bash
-# Health Check Cron Script - Runs every 30 minutes
-# Logs to workspace/logs/health.log
-# Exit codes: 0=healthy, 1=degraded, 2=critical
+# Health Check Script for ClawdBot
+# Pings all services, logs status, alerts on failures
 
-set -e
+LOG_DIR="$HOME/monitoring/logs"
+CONFIG_DIR="$HOME/monitoring/config"
+CONFIG_FILE="$CONFIG_DIR/health-config.json"
+STATE_FILE="$CONFIG_DIR/health-state.json"
+LOG_FILE="$LOG_DIR/health-check.log"
+ALERT_THRESHOLD=3
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-LOG_DIR="$PROJECT_DIR/logs"
-LOG_FILE="$LOG_DIR/health.log"
-BACKEND_URL="http://localhost:8000"
+TELEGRAM_CHAT="7909511562"
 
-# Create logs directory if it doesn't exist
-mkdir -p "$LOG_DIR"
-
-# Timestamp function
-timestamp() {
-    date "+%Y-%m-%d %H:%M:%S"
-}
-
-# Log function
 log() {
-    echo "[$(timestamp)] $1" | tee -a "$LOG_FILE"
+    echo "[$(date -Iseconds)] $1" | tee -a "$LOG_FILE"
 }
 
-# Check backend health
-check_backend() {
-    local response
-    local http_code
-    
-    response=$(curl -s -w "\n%{http_code}" "$BACKEND_URL/api/health" 2>/dev/null)
-    http_code=$(echo "$response" | tail -n1)
-    local body=$(echo "$response" | sed '$d')
-    
-    if [ "$http_code" != "200" ]; then
-        log "❌ BACKEND: HTTP $http_code"
-        return 2
-    fi
-    
-    local status=$(echo "$body" | python3 -c "import sys, json; print(json.load(sys.stdin).get('status', 'unknown'))" 2>/dev/null)
-    
-    if [ "$status" = "healthy" ]; then
-        log "✅ BACKEND: healthy"
-        return 0
-    elif [ "$status" = "degraded" ]; then
-        log "⚠️  BACKEND: degraded"
-        return 1
+check_tcp() {
+    local host="$1"
+    local port="$2"
+    if timeout 5 bash -c "echo > /dev/tcp/$host/$port" 2>/dev/null; then
+        echo "ok"
     else
-        log "❌ BACKEND: $status"
-        return 2
+        echo "fail"
     fi
 }
 
-# Check budget alerts
-check_budget() {
-    local response
-    response=$(curl -s "$BACKEND_URL/api/budget/alerts" 2>/dev/null)
-    
-    if [ -z "$response" ]; then
-        log "⚠️  BUDGET: No response"
-        return 1
-    fi
-    
-    local critical_count=$(echo "$response" | python3 -c "import sys, json; print(json.load(sys.stdin).get('critical_count', 0))" 2>/dev/null)
-    
-    if [ "$critical_count" -gt 0 ]; then
-        log "🔴 BUDGET: $critical_count critical alert(s) detected"
-        
-        # Extract and log alert details
-        echo "$response" | python3 -c "
-import sys, json
-data = json.load(sys.stdin)
-for alert in data.get('alerts', []):
-    if alert.get('level') == 'critical':
-        print(f\"  - {alert.get('period', 'unknown').capitalize()}: {alert.get('message', 'N/A')}\")
-" 2>/dev/null | while read -r line; do
-            log "  $line"
-        done
-        
-        return 2
+check_https() {
+    local host="$1"
+    if curl -s --connect-timeout 5 "https://$host" > /dev/null 2>&1; then
+        echo "ok"
     else
-        log "✅ BUDGET: No critical alerts"
-        return 0
+        echo "fail"
     fi
 }
 
-# Check error logs
-check_errors() {
-    local response
-    response=$(curl -s "$BACKEND_URL/api/error-logs?limit=5" 2>/dev/null)
-    
-    if [ -z "$response" ]; then
-        log "⚠️  ERRORS: No response"
-        return 1
-    fi
-    
-    local total=$(echo "$response" | python3 -c "import sys, json; print(json.load(sys.stdin).get('total', 0))" 2>/dev/null)
-    
-    if [ "$total" -gt 0 ]; then
-        log "⚠️  ERRORS: $total recent error(s) logged"
-        
-        # Log most recent error
-        echo "$response" | python3 -c "
-import sys, json
-data = json.load(sys.stdin)
-errors = data.get('errors', [])
-if errors:
-    latest = errors[0]
-    print(f\"  Latest: {latest.get('title', 'Unknown')} at {latest.get('timestamp', 'Unknown')}\")
-" 2>/dev/null | while read -r line; do
-            log "  $line"
-        done
-        
-        return 1
+load_state() {
+    if [[ -f "$STATE_FILE" ]]; then
+        cat "$STATE_FILE"
     else
-        log "✅ ERRORS: No recent errors"
-        return 0
+        echo '{"consecutive_failures": {}, "last_alert": null}'
     fi
 }
 
-# Check agent status
-check_agents() {
-    local response
-    response=$(curl -s "$BACKEND_URL/api/health" 2>/dev/null)
+save_state() {
+    echo "$1" > "$STATE_FILE"
+}
+
+send_alert() {
+    local message="$1"
+    log "ALERT: $message"
     
-    if [ -z "$response" ]; then
-        log "⚠️  AGENTS: No response"
-        return 1
+    if [[ -n "$TELEGRAM_BOT_TOKEN" ]]; then
+        curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
+            -d "chat_id=$TELEGRAM_CHAT" \
+            -d "text=🚨 HEALTH ALERT: $message" \
+            -d "parse_mode=Markdown" > /dev/null
     fi
     
-    # Count agent statuses
-    local online=$(echo "$response" | python3 -c "
-import sys, json
-data = json.load(sys.stdin)
-agents = data.get('checks', {}).get('agents', {})
-print(sum(1 for a in agents.values() if a.get('status') == 'online'))
-" 2>/dev/null)
+    echo "[$(date -Iseconds)] ALERT: $message" >> "$LOG_DIR/alerts.log"
+}
+
+# Main
+log "=== Health Check Started ==="
+
+state=$(load_state)
+failures_this_run=0
+status_report="🏥 **Health Check Report**\n\n"
+
+# Read services from config or use defaults
+if [[ -f "$CONFIG_FILE" ]]; then
+    services=$(python3 -c "
+import json
+with open('$CONFIG_FILE') as f:
+    config = json.load(f)
+for s in config.get('services', []):
+    print(f\"{s['name']}:{s['host']}:{s['port']}:{s.get('type', 'tcp')}\")
+")
+else
+    services="gateway:100.82.115.97:18789:tcp
+openclaw-docs:docs.openclaw.ai:443:https"
+fi
+
+while IFS=: read -r name host port type; do
+    [[ -z "$name" ]] && continue
     
-    local unknown=$(echo "$response" | python3 -c "
-import sys, json
-data = json.load(sys.stdin)
-agents = data.get('checks', {}).get('agents', {})
-print(sum(1 for a in agents.values() if a.get('status') == 'unknown'))
-" 2>/dev/null)
-    
-    log "🤖 AGENTS: $online online, $unknown unknown (SSH tunnel needed)"
-    
-    if [ "$online" -eq 0 ]; then
-        return 2
-    elif [ "$unknown" -gt 0 ]; then
-        return 1
+    if [[ "$type" == "https" ]]; then
+        status=$(check_https "$host")
     else
-        return 0
+        status=$(check_tcp "$host" "$port")
     fi
-}
+    
+    if [[ "$status" == "ok" ]]; then
+        status_report+="✅ \`$name\` ($host:$port) - OK\n"
+        state=$(echo "$state" | python3 -c "import sys,json; d=json.load(sys.stdin); d['consecutive_failures']['$name']=0; print(json.dumps(d))")
+        log "✅ $name is healthy"
+    else
+        status_report+="❌ \`$name\` ($host:$port) - FAILED\n"
+        failures_this_run=$((failures_this_run + 1))
+        
+        state=$(echo "$state" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+d['consecutive_failures']['$name'] = d['consecutive_failures'].get('$name', 0) + 1
+print(json.dumps(d))
+")
+        
+        current_failures=$(echo "$state" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['consecutive_failures'].get('$name', 0))")
+        log "❌ $name failed (consecutive: $current_failures)"
+        
+        if [[ "$current_failures" -ge "$ALERT_THRESHOLD" ]]; then
+            last_alert=$(echo "$state" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('last_alert', {}).get('$name', ''))")
+            
+            if [[ "$last_alert" != "$current_failures" ]]; then
+                send_alert "$name is down (failed $current_failures times in a row)"
+                state=$(echo "$state" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+d['last_alert'] = d.get('last_alert', {})
+d['last_alert']['$name'] = '$current_failures'
+print(json.dumps(d))
+")
+            fi
+        fi
+    fi
+done <<< "$services"
 
-# Main execution
-main() {
-    log "═══════════════════════════════════════════"
-    log "🏥 Starting health check..."
-    
-    local exit_code=0
-    
-    # Run all checks
-    check_backend || exit_code=$?
-    check_budget || { local budget_code=$?; [ $budget_code -gt $exit_code ] && exit_code=$budget_code; }
-    check_errors || { local error_code=$?; [ $error_code -gt $exit_code ] && exit_code=$error_code; }
-    check_agents || { local agent_code=$?; [ $agent_code -gt $exit_code ] && exit_code=$agent_code; }
-    
-    # Summary
-    log "═══════════════════════════════════════════"
-    case $exit_code in
-        0) log "✅ Health check PASSED - All systems healthy" ;;
-        1) log "⚠️  Health check DEGRADED - Some issues detected" ;;
-        2) log "🔴 Health check CRITICAL - Immediate attention needed" ;;
-    esac
-    log ""
-    
-    exit $exit_code
-}
+save_state "$state"
 
-main "$@"
+status_report+="\n**Checked at:** $(date '+%Y-%m-%d %H:%M')\n"
+if [[ "$failures_this_run" -eq 0 ]]; then
+    status_report+="\n🟢 All services healthy"
+else
+    status_report+="\n🔴 $failures_this_run service(s) failing"
+fi
+
+log "$status_report"
+
+# Send to Telegram if token available
+if [[ -n "$TELEGRAM_BOT_TOKEN" ]]; then
+    curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
+        -d "chat_id=$TELEGRAM_CHAT" \
+        -d "text=$status_report" \
+        -d "parse_mode=Markdown" > /dev/null
+fi
+
+echo "Health check complete: $failures_this_run failures"
