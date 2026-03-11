@@ -71,3 +71,23 @@ test-results
 
 # bv (beads viewer) local config and caches
 .bv/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+backend/.venv/
+backend/venv/
+*.egg-info/
+
+# Backend data & logs
+backend/*.db
+backend/*.log
+*.log
+/tmp/
+
+# Environment
+.env
+.env.local
+.env.production

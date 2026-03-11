@@ -3,11 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { BACKEND_URL } from "@/lib/config";
 
 type NavItem = { href: string; label: string; icon: string };
 type NavSection = { title: string; items: NavItem[] };
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
 
 const navSections: NavSection[] = [
   {

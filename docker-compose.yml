@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: dashboard-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=sqlite+aiosqlite:///./data/dashboard.db
+      - OPENCLAW_GATEWAY_WS=${OPENCLAW_GATEWAY_WS:-ws://host.docker.internal:18789}
+      - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN:-}
+      - NOTION_API_KEY=${NOTION_API_KEY:-}
+      - NOTION_OPENCLAW_DB=${NOTION_OPENCLAW_DB:-}
+      - NOTION_PERSONAL_DB=${NOTION_PERSONAL_DB:-}
+      - NOTION_IDEAS_DB=${NOTION_IDEAS_DB:-}
+      - NOTION_SYNC_ENABLED=${NOTION_SYNC_ENABLED:-false}
+      - HEALING_ENABLED=${HEALING_ENABLED:-true}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      - backend-data:/app/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dashboard-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_BACKEND_URL=http://localhost:8000
+      - NEXT_PUBLIC_GATEWAY_URL=${NEXT_PUBLIC_GATEWAY_URL:-ws://localhost:18789}
+    depends_on:
+      backend:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  backend-data:

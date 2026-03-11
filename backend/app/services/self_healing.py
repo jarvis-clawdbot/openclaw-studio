@@ -18,12 +18,13 @@ logger = logging.getLogger(__name__)
 
 async def monitor_loop():
     logger.info("Self-healing monitor started")
+    await asyncio.sleep(10)  # Warm-up delay
     while True:
         try:
             await _check_agents()
         except Exception as e:
             logger.error(f"Self-healing monitor error: {e}")
-        await asyncio.sleep(settings.healing_poll_interval_seconds)
+        await asyncio.sleep(max(settings.healing_poll_interval_seconds, 30))
 
 
 async def _check_agents():

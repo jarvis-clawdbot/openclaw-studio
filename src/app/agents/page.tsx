@@ -2,19 +2,16 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { BACKEND_URL } from "@/lib/config";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
 
-type LiveAgent = {
-  id: string;
+type DBAgent = {
+  id: number;
   name: string;
-  status: "active" | "idle" | "stuck" | "offline";
+  status: string;
   model: string | null;
   role: string;
-  avatarColor: string;
-  session_key: string | null;
-  last_active_seconds: number | null;
-  total_tokens: number | null;
+  avatar_color: string;
 };
 
 type AgentStat = { agent: string; tokens: number; cost: number };
@@ -26,25 +23,18 @@ const statusBadge: Record<string, string> = {
   offline: "bg-gray-500/20 text-gray-500 border border-gray-500/30",
 };
 
-function formatAge(secs: number | null): string {
-  if (secs === null) return "—";
-  if (secs < 60) return `${secs}s ago`;
-  if (secs < 3600) return `${Math.floor(secs / 60)}m ago`;
-  return `${Math.floor(secs / 3600)}h ago`;
-}
-
 export default function AgentsPage() {
-  const [agents, setAgents] = useState<LiveAgent[]>([]);
+  const [agents, setAgents] = useState<DBAgent[]>([]);
   const [stats, setStats] = useState<AgentStat[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = async () => {
     try {
-      const [liveRes, statsRes] = await Promise.all([
-        fetch(`${BACKEND_URL}/api/agents/live`),
+      const [agentsRes, statsRes] = await Promise.all([
+        fetch(`${BACKEND_URL}/api/agents`),
         fetch(`${BACKEND_URL}/api/analytics/by-agent`),
       ]);
-      if (liveRes.ok) setAgents(await liveRes.json());
+      if (agentsRes.ok) setAgents(await agentsRes.json());
       if (statsRes.ok) setStats(await statsRes.json());
     } catch (e) {
       console.error("[Agents] fetch error:", e);
@@ -84,10 +74,11 @@ export default function AgentsPage() {
       )}
 
       {!loading && (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {agents.map((agent, i) => {
             const stat = getStats(agent.name);
             const isActive = agent.status === "active";
+            const isFleet = agent.role?.toLowerCase().includes("worker");
             return (
               <Link
                 key={agent.id}
@@ -95,12 +86,18 @@ export default function AgentsPage() {
                 className="block glass-card p-5 animate-card-enter"
                 style={{ animationDelay: `${i * 80}ms` }}
               >
+                {/* Fleet badge */}
+                {isFleet && (
+                  <div className="text-[10px] font-semibold uppercase tracking-widest text-purple-400 mb-2">
+                    {agent.role?.includes("Azure") ? "Azure VM" : "Android"}
+                  </div>
+                )}
                 {/* Avatar + name */}
                 <div className="flex items-center gap-3 mb-4">
                   <div className="relative">
                     <div
                       className="w-11 h-11 rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-lg"
-                      style={{ backgroundColor: agent.avatarColor }}
+                      style={{ backgroundColor: agent.avatar_color }}
                     >
                       {agent.name[0]}
                     </div>
@@ -121,7 +118,6 @@ export default function AgentsPage() {
                   <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${statusBadge[agent.status] ?? statusBadge.idle}`}>
                     {agent.status}
                   </span>
-                  <span className="text-white/30 text-xs">{formatAge(agent.last_active_seconds)}</span>
                 </div>
 
                 {/* Model */}

@@ -2,16 +2,19 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { BACKEND_URL } from "@/lib/config";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
 
 type LiveAgent = {
-  id: string;
+  id: number | string;
   name: string;
   status: "active" | "idle" | "stuck" | "offline";
   model: string | null;
   role: string;
   avatarColor: string;
+  avatar_color?: string;
+  agent_type?: "local" | "fleet";
+  host?: string;
   total_tokens: number | null;
   last_active_seconds: number | null;
 };
@@ -124,13 +127,22 @@ export default function HomeClient() {
     const load = async () => {
       try {
         const [agentsRes, analyticsRes, dailyRes, activityRes, tasksRes] = await Promise.all([
-          fetch(`${BACKEND_URL}/api/agents/live`),
+          fetch(`${BACKEND_URL}/api/agents`),
           fetch(`${BACKEND_URL}/api/analytics/summary`),
           fetch(`${BACKEND_URL}/api/analytics/daily?days=7`),
           fetch(`${BACKEND_URL}/api/activity?limit=8`),
           fetch(`${BACKEND_URL}/api/tasks`),
         ]);
-        if (agentsRes.ok) setAgents(await agentsRes.json());
+        if (agentsRes.ok) {
+          const raw = await agentsRes.json();
+          // Normalize DB response to match LiveAgent shape
+          setAgents(raw.map((a: any) => ({
+            ...a,
+            avatarColor: a.avatar_color || a.avatarColor || "#6b7280",
+            agent_type: a.role?.toLowerCase().includes("worker") ? "fleet" : "local",
+            host: a.name === "ClawdBot" ? "Azure VM" : a.name === "Cathy" ? "Android" : "Mac",
+          })));
+        }
         if (analyticsRes.ok) setAnalytics(await analyticsRes.json());
         if (dailyRes.ok) setDaily(await dailyRes.json());
         if (activityRes.ok) setActivity(await activityRes.json());
@@ -274,7 +286,14 @@ export default function HomeClient() {
 
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">
-                        <h3 className="text-white font-semibold truncate group-hover:text-blue-300 transition-colors">{agent.name}</h3>
+                        <div className="min-w-0">
+                          {agent.agent_type === "fleet" && (
+                            <div className="text-[9px] font-semibold uppercase tracking-widest text-purple-400 mb-0.5">
+                              {agent.host}
+                            </div>
+                          )}
+                          <h3 className="text-white font-semibold truncate group-hover:text-blue-300 transition-colors">{agent.name}</h3>
+                        </div>
                         <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold uppercase tracking-wider flex-shrink-0
                           ${isActive ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" :
                             agent.status === "stuck" ? "bg-amber-500/20 text-amber-400" :

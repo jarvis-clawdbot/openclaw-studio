@@ -34,6 +34,32 @@ def _run_cli(*args) -> dict:
     return json.loads(result.stdout)
 
 
+@router.get("/active", response_model=List[Session])
+async def list_active_sessions():
+    """List active OpenClaw sessions (last 60 minutes)."""
+    try:
+        args = ["sessions", "--json"]
+        data = _run_cli(*args)
+        sessions = data.get("sessions", [])
+        result = []
+        for s in sessions:
+            updated = s.get("updatedAt")
+            result.append(Session(
+                sessionKey=s.get("key", ""),
+                kind=s.get("kind"),
+                label=s.get("label"),
+                agentId=s.get("agentId"),
+                lastMessageAt=str(updated) if updated else None,
+                model=s.get("model"),
+                totalTokens=s.get("totalTokens"),
+                inputTokens=s.get("inputTokens"),
+                outputTokens=s.get("outputTokens"),
+            ))
+        return result
+    except Exception:
+        return []
+
+
 @router.get("", response_model=List[Session])
 async def list_sessions(all_agents: bool = False, active: Optional[int] = None):
     """List OpenClaw sessions via CLI."""

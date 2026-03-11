@@ -5,12 +5,17 @@ from sqlalchemy import select
 from app.database import async_session, init_db
 from app.models import Agent
 
-# Agent personas with multi-agent configuration (Updated 2026-02-28)
+# Agent personas with multi-agent configuration (Updated 2026-03-11)
+# Local sub-agents + Fleet agents (ClawdBot, Cathy)
 PERSONAS = [
+    # Local sub-agents
     {"name": "Jarvis",  "role": "Orchestrator", "model": "bailian/glm-5",           "avatar_color": "#6366f1", "status": "idle"},
     {"name": "Wolff",   "role": "Researcher",   "model": "bailian/qwen3.5-plus",   "avatar_color": "#0ea5e9", "status": "idle"},
     {"name": "Dobby",   "role": "Builder",      "model": "bailian/glm-5",           "avatar_color": "#22c55e", "status": "idle"},
     {"name": "Claudy",  "role": "Reviewer",     "model": "bailian/kimi-k2.5",      "avatar_color": "#f59e0b", "status": "idle"},
+    # Fleet agents (remote workers)
+    {"name": "ClawdBot", "role": "Azure Worker",  "model": "deepseek-v3.1-terminus", "avatar_color": "#ef4444", "status": "active"},
+    {"name": "Cathy",    "role": "Android Worker", "model": "gemini-3-flash-preview", "avatar_color": "#a855f7", "status": "active"},
 ]
 
 async def seed():

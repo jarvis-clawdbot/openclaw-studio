@@ -65,6 +65,7 @@ async def get_usage_by_agent(db: AsyncSession = Depends(get_db)):
     if _by_agent_cache["data"] is not None and (now - _by_agent_cache["ts"]) < _AGENT_TTL:
         return _by_agent_cache["data"]
 
+    # Get usage from cost records
     result = await db.execute(
         select(
             Agent.name,
@@ -74,7 +75,15 @@ async def get_usage_by_agent(db: AsyncSession = Depends(get_db)):
         .join(Agent, CostRecord.agent_id == Agent.id)
         .group_by(Agent.name)
     )
-    data = [{"agent": row[0], "tokens": row[1] or 0, "cost": row[2] or 0.0} for row in result]
+    usage_map = {row[0]: {"tokens": row[1] or 0, "cost": row[2] or 0.0} for row in result}
+
+    # Get ALL agents from DB (include fleet agents even with 0 usage)
+    all_agents_result = await db.execute(select(Agent.name))
+    data = []
+    for (name,) in all_agents_result:
+        u = usage_map.get(name, {"tokens": 0, "cost": 0.0})
+        data.append({"agent": name, "tokens": u["tokens"], "cost": u["cost"]})
+
     _by_agent_cache = {"data": data, "ts": now}
     return data
 

@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useReplayStore, ReplayEvent, ReplaySession } from "@/stores/replayStore";
+import { BACKEND_URL } from "@/lib/config";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
 
 const eventColors: Record<string, string> = {
   user_message: "bg-blue-900 border-blue-500",

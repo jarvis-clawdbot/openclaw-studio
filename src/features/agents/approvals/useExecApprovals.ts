@@ -13,8 +13,8 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ExecApprovalDecision, PendingExecApproval } from "./ExecApprovalBanner";
 import { upsertPendingApproval, removePendingApprovalById } from "./pendingStore";
+import { BACKEND_URL } from "@/lib/config";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
 const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:18789";
 
 type EventFrame = {

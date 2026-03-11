@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useBackendWS } from "@/hooks/useBackendWS";
+import { BACKEND_URL } from "@/lib/config";
 
 interface Agent {
   id: string;
@@ -20,7 +21,6 @@ const statusColors: Record<string, string> = {
   offline: "bg-gray-600",
 };
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
 
 const deriveStatus = (a: Agent): Agent["status"] => {
   const db = (a.status || "idle").toLowerCase();
@@ -82,7 +82,7 @@ export default function CommandCenterPage() {
   useEffect(() => {
     const load = async () => {
       try {
-        const res = await fetch(`${BACKEND_URL}/api/agents/live`);
+        const res = await fetch(`${BACKEND_URL}/api/agents`);
         if (!res.ok) return;
         const data = await res.json();
         const mapped = (Array.isArray(data) ? data : []).map((a: any) => ({
@@ -92,7 +92,7 @@ export default function CommandCenterPage() {
           model: a.model,
           status: a.status ?? "idle",
           session_key: a.session_key ?? null,
-          updated_at: a.last_active ?? null,
+          updated_at: a.updated_at ?? null,
         }));
         setAgents(mapped);
       } catch {

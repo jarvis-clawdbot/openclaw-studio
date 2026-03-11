@@ -92,6 +92,57 @@ class RecoveryAction(Base):
     resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
 
+class AuditLog(Base):
+    """Tamper-evident audit log for all agent actions. Append-only (no update/delete)."""
+    __tablename__ = "audit_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    agent_id: Mapped[str] = mapped_column(String(100), index=True)
+    action: Mapped[str] = mapped_column(String(100), index=True)  # exec, file_read, file_write, gateway_restart, …
+    details: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON string
+    risk_level: Mapped[str] = mapped_column(String(10), default="low")   # low | medium | high
+    ip_address: Mapped[str] = mapped_column(String(64), default="local")
+    status: Mapped[str] = mapped_column(String(20), default="success")   # success | failure | blocked
+
+    __table_args__ = (
+        Index("idx_audit_logs_ts_agent", "timestamp", "agent_id"),
+        Index("idx_audit_logs_risk", "risk_level"),
+    )
+
+
+class Approval(Base):
+    """Human-in-the-loop approval queue for high-risk agent actions."""
+    __tablename__ = "approvals_queue"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    agent_id: Mapped[str] = mapped_column(String(100), index=True)
+    action: Mapped[str] = mapped_column(String(100))         # e.g. "exec_rm", "gateway_restart", "large_spend"
+    details: Mapped[Optional[str]] = mapped_column(Text, nullable=True)   # JSON string with action details
+    risk_level: Mapped[str] = mapped_column(String(10), default="high")   # "medium" | "high"
+    status: Mapped[str] = mapped_column(String(20), default="pending")    # "pending" | "approved" | "rejected"
+    decided_by: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    decided_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    rejection_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)   # optional approve comment
+
+    __table_args__ = (
+        Index("idx_approvals_queue_status", "status", "created_at"),
+    )
+
+
+class ApprovalThreshold(Base):
+    """Configurable thresholds for when approvals are required."""
+    __tablename__ = "approval_thresholds"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    key: Mapped[str] = mapped_column(String(100), unique=True)    # e.g. "max_spend_usd", "exec_risk_level"
+    value: Mapped[str] = mapped_column(Text)                       # JSON-encoded value
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class NotionSyncQueue(Base):
     __tablename__ = "notion_sync_queue"
 

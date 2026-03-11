@@ -1,14 +1,16 @@
 import { create } from "zustand";
+import { BACKEND_URL } from "@/lib/config";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
 
-type Agent = {
+export type Agent = {
   id: string;
   name: string;
   status: string;
   model: string;
   role: string;
   avatarColor: string;
+  agent_type: "local" | "fleet";
+  host?: string;
   session_key?: string | null;
   last_active_seconds?: number | null;
   total_tokens?: number | null;
@@ -22,21 +24,6 @@ type TopologyState = {
   setSelectedAgent: (agent: Agent | null) => void;
 };
 
-// Role map based on agent name
-const ROLE_MAP: Record<string, string> = {
-  jarvis: "Orchestrator",
-  wolff: "Researcher",
-  dobby: "Builder",
-  claudy: "Reviewer",
-};
-
-const COLOR_MAP: Record<string, string> = {
-  jarvis: "#8b5cf6",
-  wolff: "#3b82f6",
-  dobby: "#10b981",
-  claudy: "#f59e0b",
-};
-
 export const useTopologyStore = create<TopologyState>((set) => ({
   agentsList: [],
   selectedAgent: null,
@@ -45,21 +32,28 @@ export const useTopologyStore = create<TopologyState>((set) => ({
   loadAgents: async () => {
     set({ isLoading: true });
     try {
-      const res = await fetch(`${BACKEND_URL}/api/agents/live`);
+      // Use /api/agents (DB) as primary source - includes all 6 agents (local + fleet)
+      const res = await fetch(`${BACKEND_URL}/api/agents`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      
-      const agents: Agent[] = data.map((a: any) => ({
-        id: a.id,
-        name: a.name,
-        status: a.status,  // Use status from live API (active/idle)
-        model: a.model || "unknown",
-        role: ROLE_MAP[a.id] || "Agent",
-        avatarColor: COLOR_MAP[a.id] || "#6b7280",
-        session_key: a.session_key,
-        last_active_seconds: a.last_active_seconds,
-        total_tokens: a.total_tokens,
-      }));
+
+      const agents: Agent[] = data.map((a: any) => {
+        // Derive agent_type from role for now
+        const isFleet = a.role?.toLowerCase().includes("worker");
+        return {
+          id: a.name.toLowerCase(),
+          name: a.name,
+          status: a.status || "idle",
+          model: a.model || "unknown",
+          role: a.role || "Agent",
+          avatarColor: a.avatar_color || a.avatarColor || "#6b7280",
+          agent_type: isFleet ? "fleet" : "local",
+          host: isFleet ? (a.name === "ClawdBot" ? "Azure VM" : "Android") : "Mac",
+          session_key: a.session_key ?? null,
+          last_active_seconds: a.last_active_seconds ?? null,
+          total_tokens: a.total_tokens ?? null,
+        };
+      });
 
       set({ agentsList: agents, isLoading: false });
     } catch (error) {
@@ -71,16 +65,16 @@ export const useTopologyStore = create<TopologyState>((set) => ({
   setSelectedAgent: (agent) => set({ selectedAgent: agent }),
 }));
 
-// Auto-refresh every 5 seconds
+// Auto-refresh every 10 seconds
 let intervalId: NodeJS.Timeout | null = null;
 
 export function startTopologySync() {
   if (intervalId) return;
   const store = useTopologyStore.getState();
-  store.loadAgents(); // Initial load
+  store.loadAgents();
   intervalId = setInterval(() => {
-    store.loadAgents();
-  }, 5000);
+    useTopologyStore.getState().loadAgents();
+  }, 10_000);
 }
 
 export function stopTopologySync() {

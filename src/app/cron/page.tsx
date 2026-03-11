@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Modal from "@/components/modals/Modal";
+import { BACKEND_URL } from "@/lib/config";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
 
 type CronJob = {
   id: string;

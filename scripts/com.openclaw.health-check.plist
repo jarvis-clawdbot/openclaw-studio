@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.openclaw.health-check</string>
+    
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/jarvis-openclaw/dashboard-vision/scripts/health-check.sh</string>
+    </array>
+    
+    <key>WorkingDirectory</key>
+    <string>/Users/jarvis-openclaw/dashboard-vision</string>
+    
+    <key>StandardOutPath</key>
+    <string>/Users/jarvis-openclaw/dashboard-vision/logs/health-cron.log</string>
+    
+    <key>StandardErrorPath</key>
+    <string>/Users/jarvis-openclaw/dashboard-vision/logs/health-cron.log</string>
+    
+    <key>StartInterval</key>
+    <integer>1800</integer>
+    
+    <key>RunAtLoad</key>
+    <true/>
+</dict>
+</plist>

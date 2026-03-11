@@ -1,0 +1,56 @@
+┌─────────────────────────────────────────────────────────────────────┐
+│                         AUDIT_LOGS TABLE                            │
+├──────────────┬──────────────┬─────────────────────────────────────┤
+│ Column       │ Type         │ Description                         │
+├──────────────┼──────────────┼─────────────────────────────────────┤
+│ id           │ INTEGER      │ Primary Key (auto-increment)        │
+│ timestamp    │ DATETIME     │ ISO 8601 UTC (indexed)              │
+│ agent_id     │ STRING(100)  │ Agent identifier (indexed)          │
+│ action       │ STRING(100)  │ Action type (indexed)               │
+│ details      │ TEXT         │ JSON string with metadata           │
+│ risk_level   │ STRING(10)   │ "low" | "medium" | "high"           │
+│ ip_address   │ STRING(64)   │ IP or "local"                       │
+│ status       │ STRING(20)   │ "success" | "failure" | "blocked"   │
+└──────────────┴──────────────┴─────────────────────────────────────┘
+
+INDEXES:
+  - idx_audit_logs_ts_agent (timestamp, agent_id)
+  - idx_audit_logs_risk (risk_level)
+
+SECURITY:
+  ✅ Append-only (no UPDATE/DELETE endpoints)
+  ✅ Auto-timestamped (server-side)
+  ✅ JSON details validated on write
+  ✅ Risk-level enforcement (enum validation)
+
+SAMPLE ROW:
+┌────┬─────────────────────┬──────────────┬──────────────────┬──────────────────────────────────────────┬────────────┬────────────┬─────────┐
+│ id │ timestamp           │ agent_id     │ action           │ details                                  │ risk_level │ ip_address │ status  │
+├────┼─────────────────────┼──────────────┼──────────────────┼──────────────────────────────────────────┼────────────┼────────────┼─────────┤
+│ 4  │ 2026-03-10 20:16:52 │ orchestrator │ gateway_restart  │ {"reason": "config change"}              │ high       │ local      │ success │
+└────┴─────────────────────┴──────────────┴──────────────────┴──────────────────────────────────────────┴────────────┴────────────┴─────────┘
+
+API FLOW:
+  ┌──────────────────┐
+  │  Other Routes    │  ← app.routes.exec_approvals, gateway, etc.
+  │  (Future TODO)   │
+  └────────┬─────────┘
+           │ import log_audit
+           ▼
+  ┌──────────────────┐
+  │  audit.py        │  ← log_audit(agent_id, action, details, risk, status)
+  │  log_audit()     │
+  └────────┬─────────┘
+           │ INSERT INTO audit_logs
+           ▼
+  ┌──────────────────┐
+  │  SQLite DB       │
+  │  audit_logs      │
+  └────────┬─────────┘
+           │ Query
+           ▼
+  ┌──────────────────┐
+  │  GET /audit/logs │  → Frontend (Next.js)
+  │  GET /stats      │
+  │  POST /export    │
+  └──────────────────┘

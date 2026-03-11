@@ -19,21 +19,29 @@
     "pw:open:max": "scripts/playwright-open-maximized.sh"
   },
   "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
     "@multiavatar/multiavatar": "github:multiavatar/Multiavatar",
     "@noble/ed25519": "^3.0.0",
     "@radix-ui/react-slot": "^1.2.4",
+    "@tanstack/react-virtual": "^3.13.19",
     "@vercel/otel": "^2.1.0",
+    "@xyflow/react": "^12.10.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "framer-motion": "^12.34.3",
     "lucide-react": "^0.563.0",
     "next": "16.1.6",
+    "radix-ui": "^1.4.3",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-markdown": "^10.1.0",
     "react-mentions-ts": "^5.4.7",
+    "recharts": "^3.7.0",
     "remark-gfm": "^4.0.1",
     "tailwind-merge": "^3.4.0",
-    "ws": "^8.18.3"
+    "ws": "^8.18.3",
+    "zustand": "^5.0.11"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.0",

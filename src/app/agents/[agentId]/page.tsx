@@ -3,16 +3,19 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import { BACKEND_URL } from "@/lib/config";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
 
 type LiveAgent = {
-  id: string;
+  id: string | number;
   name: string;
   status: string;
   model: string | null;
   role: string;
   avatarColor: string;
+  avatar_color?: string;
+  agent_type?: string;
+  host?: string;
   session_key: string | null;
   last_active_seconds: number | null;
   total_tokens: number | null;
@@ -51,14 +54,20 @@ export default function AgentDetailPage() {
     const load = async () => {
       try {
         const [liveRes, statsRes, dailyRes, sessRes] = await Promise.all([
-          fetch(`${BACKEND_URL}/api/agents/live`),
+          fetch(`${BACKEND_URL}/api/agents`),
           fetch(`${BACKEND_URL}/api/analytics/by-agent`),
           fetch(`${BACKEND_URL}/api/analytics/daily?days=14`),
           fetch(`${BACKEND_URL}/api/sessions`),
         ]);
         if (liveRes.ok) {
-          const all: LiveAgent[] = await liveRes.json();
-          setAgent(all.find((a) => a.id === agentId) ?? null);
+          const all: LiveAgent[] = (await liveRes.json()).map((a: any) => ({
+            ...a,
+            avatarColor: a.avatar_color || a.avatarColor || "#6b7280",
+            agent_type: a.role?.toLowerCase().includes("worker") ? "fleet" : "local",
+            host: a.name === "ClawdBot" ? "Azure VM" : a.name === "Cathy" ? "Android" : "Mac",
+          }));
+          // Match by numeric id OR name
+          setAgent(all.find((a) => String(a.id) === agentId || a.name.toLowerCase() === agentId.toLowerCase()) ?? null);
         }
         if (statsRes.ok) {
           const all: AgentStat[] = await statsRes.json();

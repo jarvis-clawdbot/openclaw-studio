@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { Avatar } from "@/components/shared/Avatar";
+import { BACKEND_URL } from "@/lib/config";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
 
 type Organization = {
   id: number;
