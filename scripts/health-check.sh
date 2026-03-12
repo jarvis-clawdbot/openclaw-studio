@@ -1,6 +1,6 @@
 #!/bin/bash
 # Health Check Script for ClawdBot
-# Pings all services, logs status, alerts on failures
+# Only alerts on failures (not on every successful check)
 
 LOG_DIR="$HOME/monitoring/logs"
 CONFIG_DIR="$HOME/monitoring/config"
@@ -65,20 +65,20 @@ log "=== Health Check Started ==="
 
 state=$(load_state)
 failures_this_run=0
-status_report="🏥 **Health Check Report**\n\n"
+alert_messages=""
 
-# Read services from config or use defaults
+# Read services from config
 if [[ -f "$CONFIG_FILE" ]]; then
     services=$(python3 -c "
 import json
 with open('$CONFIG_FILE') as f:
     config = json.load(f)
 for s in config.get('services', []):
-    print(f\"{s['name']}:{s['host']}:{s['port']}:{s.get('type', 'tcp')}\")
+    print(s['name'] + ':' + s['host'] + ':' + str(s['port']) + ':' + s.get('type', 'tcp'))
 ")
 else
-    services="gateway:100.82.115.97:18789:tcp
-openclaw-docs:docs.openclaw.ai:443:https"
+    services="openclaw-docs:docs.openclaw.ai:443:https
+clawdbot-local:127.0.0.1:22:tcp"
 fi
 
 while IFS=: read -r name host port type; do
@@ -91,11 +91,9 @@ while IFS=: read -r name host port type; do
     fi
     
     if [[ "$status" == "ok" ]]; then
-        status_report+="✅ \`$name\` ($host:$port) - OK\n"
         state=$(echo "$state" | python3 -c "import sys,json; d=json.load(sys.stdin); d['consecutive_failures']['$name']=0; print(json.dumps(d))")
         log "✅ $name is healthy"
     else
-        status_report+="❌ \`$name\` ($host:$port) - FAILED\n"
         failures_this_run=$((failures_this_run + 1))
         
         state=$(echo "$state" | python3 -c "
@@ -108,11 +106,13 @@ print(json.dumps(d))
         current_failures=$(echo "$state" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['consecutive_failures'].get('$name', 0))")
         log "❌ $name failed (consecutive: $current_failures)"
         
+        # Only alert after threshold
         if [[ "$current_failures" -ge "$ALERT_THRESHOLD" ]]; then
             last_alert=$(echo "$state" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('last_alert', {}).get('$name', ''))")
             
             if [[ "$last_alert" != "$current_failures" ]]; then
-                send_alert "$name is down (failed $current_failures times in a row)"
+                alert_messages="${alert_messages}• $name (failed $current_failures times)
+"
                 state=$(echo "$state" | python3 -c "
 import sys, json
 d = json.load(sys.stdin)
@@ -127,21 +127,14 @@ done <<< "$services"
 
 save_state "$state"
 
-status_report+="\n**Checked at:** $(date '+%Y-%m-%d %H:%M')\n"
-if [[ "$failures_this_run" -eq 0 ]]; then
-    status_report+="\n🟢 All services healthy"
+# Only send alert if there are failures
+if [[ -n "$alert_messages" ]]; then
+    send_alert "The following services are down:
+
+$alert_messages"
+    log "Sent alert for $failures_this_run failures"
 else
-    status_report+="\n🔴 $failures_this_run service(s) failing"
-fi
-
-log "$status_report"
-
-# Send to Telegram if token available
-if [[ -n "$TELEGRAM_BOT_TOKEN" ]]; then
-    curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
-        -d "chat_id=$TELEGRAM_CHAT" \
-        -d "text=$status_report" \
-        -d "parse_mode=Markdown" > /dev/null
+    log "All services healthy - no alert sent"
 fi
 
 echo "Health check complete: $failures_this_run failures"
