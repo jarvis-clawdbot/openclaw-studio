@@ -23,6 +23,21 @@ type Analytics = { total_tokens: number; total_cost: number; total_requests: num
 type DailyRecord = { date: string; tokens: number; cost: number; requests: number };
 type ActivityEvent = { id: number; event_type: string; description: string; created_at: string };
 
+type AutonomyStatus = {
+  last_research_run: string | null;
+  next_scheduled_run: string;
+  circuit_breaker: {
+    state: "OPEN" | "CLOSED";
+    last_5_events: {
+      total: number;
+      successes: number;
+      failures: number;
+    };
+  };
+  pending_proposals: number;
+  last_updated: string;
+};
+
 const STATUS_META: Record<string, { color: string; glow: string; label: string; ring: string }> = {
   active: { color: "bg-emerald-400", glow: "glow-active", label: "Active", ring: "ring-pulse" },
   idle:   { color: "bg-slate-500",   glow: "",            label: "Idle",   ring: "" },
@@ -120,18 +135,20 @@ export default function HomeClient() {
   const [daily, setDaily] = useState<DailyRecord[]>([]);
   const [activity, setActivity] = useState<ActivityEvent[]>([]);
   const [taskCount, setTaskCount] = useState(0);
+  const [autonomyStatus, setAutonomyStatus] = useState<AutonomyStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
   useEffect(() => {
     const load = async () => {
       try {
-        const [agentsRes, analyticsRes, dailyRes, activityRes, tasksRes] = await Promise.all([
+        const [agentsRes, analyticsRes, dailyRes, activityRes, tasksRes, autonomyRes] = await Promise.all([
           fetch(`${BACKEND_URL}/api/agents`),
           fetch(`${BACKEND_URL}/api/analytics/summary`),
           fetch(`${BACKEND_URL}/api/analytics/daily?days=7`),
           fetch(`${BACKEND_URL}/api/activity?limit=8`),
           fetch(`${BACKEND_URL}/api/tasks`),
+          fetch(`${BACKEND_URL}/api/autonomy/status`),
         ]);
         if (agentsRes.ok) {
           const raw = await agentsRes.json();
@@ -140,7 +157,7 @@ export default function HomeClient() {
             ...a,
             avatarColor: a.avatar_color || a.avatarColor || "#6b7280",
             agent_type: a.role?.toLowerCase().includes("worker") ? "fleet" : "local",
-            host: a.name === "ClawdBot" ? "Azure VM" : a.name === "Cathy" ? "Android" : "Mac",
+            host: a.name === "ClawdBot" ? "Azure VM" : a.name === "Cathy" ? "Android" : "Mac (local)",
           })));
         }
         if (analyticsRes.ok) setAnalytics(await analyticsRes.json());
@@ -150,6 +167,7 @@ export default function HomeClient() {
           const tasks = await tasksRes.json();
           setTaskCount(Array.isArray(tasks) ? tasks.length : 0);
         }
+        if (autonomyRes.ok) setAutonomyStatus(await autonomyRes.json());
         setError(false);
       } catch (e) {
         console.error("Dashboard load error:", e);
@@ -159,7 +177,7 @@ export default function HomeClient() {
       }
     };
     load();
-    const interval = setInterval(load, 12000);
+    const interval = setInterval(load, 30000); // Auto-refresh every 30 seconds
     return () => clearInterval(interval);
   }, []);
 
@@ -343,6 +361,64 @@ export default function HomeClient() {
 
         {/* Right Column */}
         <div className="space-y-5">
+          {/* Autonomy Status Widget (NEW for Phase 4) */}
+          {autonomyStatus && (
+            <div>
+              <h2 className="text-base font-semibold text-white mb-3">Autonomy Status</h2>
+              <div className="glass-card p-4 space-y-3">
+                {/* Last run */}
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-white/40">Last research run</span>
+                  <span className="text-xs text-white/70 font-mono">
+                    {autonomyStatus.last_research_run
+                      ? new Date(autonomyStatus.last_research_run).toLocaleString('en-US', {
+                          month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                        })
+                      : 'Never'}
+                  </span>
+                </div>
+                
+                {/* Next scheduled */}
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-white/40">Next scheduled</span>
+                  <span className="text-xs text-emerald-400 font-mono">{autonomyStatus.next_scheduled_run}</span>
+                </div>
+                
+                {/* Circuit breaker state */}
+                <div className="pt-2 border-t border-white/10">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs text-white/40">Circuit breaker</span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold uppercase tracking-wider
+                      ${autonomyStatus.circuit_breaker.state === 'CLOSED' 
+                        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
+                        : 'bg-red-500/20 text-red-400 border border-red-500/30'}`}>
+                      {autonomyStatus.circuit_breaker.state}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 text-[10px] text-white/30">
+                    <span className="text-emerald-400/70">✓ {autonomyStatus.circuit_breaker.last_5_events.successes}</span>
+                    <span className="text-red-400/70">✗ {autonomyStatus.circuit_breaker.last_5_events.failures}</span>
+                  </div>
+                </div>
+                
+                {/* Pending proposals */}
+                <div className="pt-2 border-t border-white/10">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-white/40">Pending proposals</span>
+                    <span className={`text-sm font-bold ${autonomyStatus.pending_proposals > 0 ? 'text-amber-400' : 'text-white/30'}`}>
+                      {autonomyStatus.pending_proposals}
+                    </span>
+                  </div>
+                </div>
+                
+                {/* Last updated */}
+                <div className="pt-2 border-t border-white/10 text-[9px] text-white/20 text-center">
+                  Updated {new Date(autonomyStatus.last_updated).toLocaleTimeString()}
+                </div>
+              </div>
+            </div>
+          )}
+          
           {/* Activity Feed */}
           <div>
             <div className="flex items-center justify-between mb-3">

@@ -17,7 +17,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models import Agent
+from app.models import Agent, Task
+from app.models.activity import ActivityEvent
 
 router = APIRouter()
 
@@ -268,3 +269,45 @@ async def delete_agent(agent_id: int, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Agent not found")
     await db.delete(agent)
     await db.commit()
+
+
+@router.get("/{agent_id}/tasks")
+async def get_agent_tasks(agent_id: int, db: AsyncSession = Depends(get_db)):
+    """Get last 10 completed tasks for an agent."""
+    # First get the agent by ID
+    result = await db.execute(select(Agent).where(Agent.id == agent_id))
+    agent = result.scalar_one_or_none()
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    
+    # Get completed tasks for this agent, ordered by completion date
+    # Support both "done" and "completed" status
+    result = await db.execute(
+        select(Task)
+        .where(Task.agent_id == agent_id)
+        .where(Task.status.in_(["done", "completed"]))
+        .order_by(Task.completed_at.desc())
+        .limit(10)
+    )
+    tasks = result.scalars().all()
+    return tasks
+
+
+@router.get("/{agent_id}/activity")
+async def get_agent_activity(agent_id: int, db: AsyncSession = Depends(get_db)):
+    """Get last 20 activity events for an agent."""
+    # First get the agent by ID to get its name
+    result = await db.execute(select(Agent).where(Agent.id == agent_id))
+    agent = result.scalar_one_or_none()
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    
+    # Get activity events for this agent (agent_id is stored as name string)
+    result = await db.execute(
+        select(ActivityEvent)
+        .where(ActivityEvent.agent_id == agent.name)
+        .order_by(ActivityEvent.created_at.desc())
+        .limit(20)
+    )
+    events = result.scalars().all()
+    return events

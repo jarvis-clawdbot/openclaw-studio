@@ -1,6 +1,6 @@
 from __future__ import annotations
 from fastapi import APIRouter
-from app.routes import logs,  nodes,  memory,  memory_browser,  sessions,  sessions_live,  agents, agents_live, tasks, analytics, recovery, replay, health, health_multiagent, error_logs, budget_alerts, sync, gateway_events, activity, approvals, approvals_ui, skills, gateways, tags, boards, cron, exec_approvals, webhooks, organizations, audit, agent_registry, traces, model_performance, system_health
+from app.routes import logs,  nodes,  memory,  memory_browser,  sessions,  sessions_live,  agents, agents_live, tasks, analytics, recovery, replay, health, health_multiagent, error_logs, budget_alerts, sync, gateway_events, activity, approvals, approvals_ui, skills, gateways, tags, boards, cron, exec_approvals, webhooks, organizations, audit, agent_registry, traces, model_performance, system_health, autonomy
 
 api_router = APIRouter(prefix="/api")
 
@@ -38,3 +38,4 @@ api_router.include_router(logs.router, prefix="/logs", tags=["logs"])
 api_router.include_router(traces.router, prefix="/traces", tags=["traces"])
 api_router.include_router(model_performance.router, prefix="/models", tags=["model-performance"])
 api_router.include_router(system_health.router, prefix="/system", tags=["system"])
+api_router.include_router(autonomy.router, prefix="/autonomy", tags=["autonomy"])

@@ -25,16 +25,12 @@ const edgeTypes: any = { agent: AgentEdge };
 // Orchestrator — always Jarvis
 const ORCHESTRATOR_ID = "jarvis";
 
-// Fixed positions for known local agents
-const KNOWN_POSITIONS: Record<string, { x: number; y: number }> = {
-  jarvis:   { x: 350, y: 60 },
-  wolff:    { x: 100, y: 300 },
-  dobby:    { x: 350, y: 300 },
-  claudy:   { x: 600, y: 300 },
-  // Fleet agents — second row
-  clawdbot: { x: 150, y: 540 },
-  cathy:    { x: 550, y: 540 },
-};
+// Node card dimensions + spacing
+const NODE_W = 180;
+const NODE_H = 130;  // approx rendered height
+const COL_GAP = 220; // horizontal gap between card centers
+const ROW_GAP = 200; // vertical gap between rows
+const MAX_PER_ROW = 5; // wrap local agents after this many per row
 
 /** Generate layout for any number of agents dynamically. */
 function computePositions(agents: Agent[]): Record<string, { x: number; y: number }> {
@@ -42,32 +38,36 @@ function computePositions(agents: Agent[]): Record<string, { x: number; y: numbe
   const localAgents = agents.filter((a) => a.agent_type !== "fleet" && a.id !== ORCHESTRATOR_ID);
   const fleetAgents = agents.filter((a) => a.agent_type === "fleet");
 
-  // Place orchestrator at top center
+  // ── Orchestrator: top center ──────────────────────────────────────
   const orch = agents.find((a) => a.id === ORCHESTRATOR_ID);
   if (orch) {
-    positions[ORCHESTRATOR_ID] = KNOWN_POSITIONS[ORCHESTRATOR_ID] ?? { x: 350, y: 60 };
+    positions[ORCHESTRATOR_ID] = { x: 0, y: 0 };
   }
 
-  // Place local sub-agents in a row
+  // ── Local sub-agents: wrap into rows of MAX_PER_ROW ─────────────
+  const numLocalRows = Math.ceil(localAgents.length / MAX_PER_ROW);
   localAgents.forEach((a, i) => {
-    if (KNOWN_POSITIONS[a.id]) {
-      positions[a.id] = KNOWN_POSITIONS[a.id];
-    } else {
-      const startX = 100;
-      const spacing = Math.min(250, 700 / Math.max(localAgents.length, 1));
-      positions[a.id] = { x: startX + i * spacing, y: 300 };
-    }
+    const row = Math.floor(i / MAX_PER_ROW);
+    const col = i % MAX_PER_ROW;
+    const countInThisRow = Math.min(MAX_PER_ROW, localAgents.length - row * MAX_PER_ROW);
+    // Center each row horizontally relative to orchestrator
+    const rowWidth = (countInThisRow - 1) * COL_GAP;
+    const startX = -(rowWidth / 2);
+    positions[a.id] = {
+      x: startX + col * COL_GAP,
+      y: ROW_GAP + row * ROW_GAP,
+    };
   });
 
-  // Place fleet agents in a second row
+  // ── Fleet agents: row below local agents, spread wide ────────────
+  const fleetY = ROW_GAP + numLocalRows * ROW_GAP + ROW_GAP * 0.3;
   fleetAgents.forEach((a, i) => {
-    if (KNOWN_POSITIONS[a.id]) {
-      positions[a.id] = KNOWN_POSITIONS[a.id];
-    } else {
-      const startX = 150;
-      const spacing = Math.min(300, 700 / Math.max(fleetAgents.length, 1));
-      positions[a.id] = { x: startX + i * spacing, y: 540 };
-    }
+    const rowWidth = (fleetAgents.length - 1) * (COL_GAP + 60);
+    const startX = -(rowWidth / 2);
+    positions[a.id] = {
+      x: startX + i * (COL_GAP + 60),
+      y: fleetY,
+    };
   });
 
   return positions;
@@ -164,25 +164,35 @@ function TopologyInner() {
       )}
 
       {/* Header bar */}
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 flex items-center gap-3 px-4 py-2 rounded-full bg-slate-900/90 border border-slate-700 text-sm text-slate-300 shadow-lg">
-        <span className="flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-emerald-400" />
-          Active
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-slate-500" />
-          Idle
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-red-500" />
-          Stuck
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-gray-600" />
-          Offline
-        </span>
-        <span className="ml-2 text-slate-500">|</span>
-        <span>{activeCount} active · {localCount} local · {fleetCount} fleet · {agentsList.length} total</span>
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 flex items-center gap-4 px-5 py-2.5 rounded-full bg-slate-900/95 border border-slate-700/80 text-sm text-slate-300 shadow-xl backdrop-blur-sm whitespace-nowrap">
+        <div className="flex items-center gap-3">
+          <span className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]" />
+            <span className="text-xs">Active</span>
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-slate-500" />
+            <span className="text-xs">Idle</span>
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.7)]" />
+            <span className="text-xs">Stuck</span>
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-gray-600" />
+            <span className="text-xs">Offline</span>
+          </span>
+        </div>
+        <div className="w-px h-4 bg-slate-600" />
+        <div className="flex items-center gap-3 text-xs text-slate-400">
+          <span><span className="text-emerald-400 font-semibold">{activeCount}</span> active</span>
+          <span className="text-slate-600">·</span>
+          <span><span className="text-white font-semibold">{localCount}</span> local</span>
+          <span className="text-slate-600">·</span>
+          <span><span className="text-white font-semibold">{fleetCount}</span> fleet</span>
+          <span className="text-slate-600">·</span>
+          <span><span className="text-white font-semibold">{agentsList.length}</span> total</span>
+        </div>
       </div>
 
       <ReactFlow
@@ -195,25 +205,33 @@ function TopologyInner() {
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         fitView
-        fitViewOptions={{ padding: 0.2 }}
-        minZoom={0.3}
+        fitViewOptions={{ padding: 0.35, includeHiddenNodes: false }}
+        minZoom={0.2}
         maxZoom={2}
         colorMode="dark"
+        proOptions={{ hideAttribution: true }}
       >
-        <Background color="#1e293b" gap={24} />
-        <Controls className="bg-slate-900 border border-slate-700 rounded-lg" />
+        <Background color="#1e293b" gap={28} size={1} />
+        <Controls
+          className="bg-slate-900/90 border border-slate-700 rounded-xl shadow-lg"
+          showInteractive={false}
+        />
         <MiniMap
           nodeColor={(n) => {
             const a = agentsList.find((ag) => ag.id === n.id);
+            if (a?.status === "active") return "#10b981";
+            if (a?.status === "stuck") return "#ef4444";
+            if (a?.status === "offline") return "#374151";
             return a?.avatarColor ?? "#6b7280";
           }}
-          className="bg-slate-900 border border-slate-700 rounded-lg"
+          className="bg-slate-900/90 border border-slate-700 rounded-xl shadow-lg"
+          maskColor="rgba(15,23,42,0.7)"
         />
       </ReactFlow>
 
       {selectedAgent && (
         <AgentDetailPanel
-          agent={selectedAgent}
+          agent={selectedAgent as any}
           onClose={() => setSelectedAgent(null)}
         />
       )}

@@ -3,7 +3,7 @@ Gateway Sync Service - Syncs OpenClaw gateway agent status to dashboard database
 """
 import logging
 from datetime import datetime
-from sqlalchemy import select
+from sqlalchemy import select, func
 from app.database import async_session
 from app.models import Agent
 
@@ -11,14 +11,31 @@ logger = logging.getLogger(__name__)
 
 # Map gateway agent names to database IDs
 AGENT_NAME_MAP = {
+    # Core agents
     "orchestrator": "Jarvis",
-    "researcher": "Wolff", 
+    "researcher": "Wolff",
     "coder": "Dobby",
     "reviewer": "Claudy",
     "jarvis": "Jarvis",
     "wolff": "Wolff",
     "dobby": "Dobby",
     "claudy": "Claudy",
+    # Fleet agents
+    "clawdbot": "ClawdBot",
+    "cathy": "Cathy",
+    # Phase 1 specialized agents
+    "planner": "Planner",
+    "architect": "Architect",
+    "security-reviewer": "SecReviewer",
+    "secreviewer": "SecReviewer",
+    "build-error-resolver": "BuildFixer",
+    "buildfixer": "BuildFixer",
+    "refactor-cleaner": "Refactor",
+    "refactor": "Refactor",
+    "doc-updater": "DocUpdater",
+    "docupdater": "DocUpdater",
+    "database-reviewer": "DBReviewer",
+    "dbreviewer": "DBReviewer",
 }
 
 async def sync_agent_status(agent_name: str, status: str, session_key: str = None):
@@ -26,17 +43,25 @@ async def sync_agent_status(agent_name: str, status: str, session_key: str = Non
     normalized_name = AGENT_NAME_MAP.get(agent_name.lower(), agent_name.title())
     
     async with async_session() as db:
+        # Try exact match first
         result = await db.execute(
             select(Agent).where(Agent.name == normalized_name)
         )
         agent = result.scalar_one_or_none()
+        
+        # If not found, try case-insensitive match (ilike)
+        if not agent:
+            result = await db.execute(
+                select(Agent).where(func.lower(Agent.name) == func.lower(normalized_name))
+            )
+            agent = result.scalar_one_or_none()
         
         if agent:
             agent.status = status
             agent.session_key = session_key
             agent.updated_at = datetime.utcnow()
             await db.commit()
-            logger.info(f"Synced {normalized_name} status to {status}")
+            logger.info(f"Synced {agent.name} status to {status}")
             return True
         else:
             logger.warning(f"Agent {normalized_name} not found in database")

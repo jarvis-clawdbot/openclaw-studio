@@ -12,6 +12,7 @@ type DBAgent = {
   model: string | null;
   role: string;
   avatar_color: string;
+  total_tokens?: number;
 };
 
 type AgentStat = { agent: string; tokens: number; cost: number };
