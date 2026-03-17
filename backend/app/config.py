@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     jarvis_model: str = "ollama-cloud-1/glm-5"
     wolff_model: str = "nvidia-pool/z-ai/glm4.7"
     dobby_model: str = "ollama-cloud-2/glm-5"
-    claudy_model: str = "ollama-cloud-3/glm-5"
+    claudy_model: str = "bailian/kimi-k2.5"
     fallback_model: str = "nvidia-pool/z-ai/glm4.7"
 
     # Notion
