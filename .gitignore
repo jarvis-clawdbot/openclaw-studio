@@ -91,3 +91,7 @@ backend/*.log
 .env
 .env.local
 .env.production
+
+# SQLite transient files
+*.db-shm
+*.db-wal
