@@ -21,6 +21,11 @@ git reset HEAD .env 2>/dev/null
 TIMESTAMP=$(date '+%Y-%m-%d %H:%M')
 CHANGED=$(git diff --cached --name-only | wc -l | tr -d ' ')
 
+if [ "$CHANGED" -eq 0 ]; then
+  echo "No substantive changes after filtering (DB WAL, .env, etc.) — skipping commit"
+  exit 0
+fi
+
 git commit -m "auto: daily snapshot ${TIMESTAMP} (${CHANGED} files)" 2>&1
 
 git push origin dashboard-vision 2>&1
